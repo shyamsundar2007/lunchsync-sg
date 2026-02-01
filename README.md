@@ -21,22 +21,7 @@ cd lunchsync-sg
 pip install -e .
 ```
 
-### 2. Run Setup
-
-Run setup with your bank export files to auto-detect accounts and map them to Lunch Money:
-
-```bash
-lunchsync-sg --setup ~/Downloads/bank-exports/
-```
-
-The setup wizard will:
-1. Scan your bank export files to auto-detect accounts
-2. Fetch your Lunch Money assets
-3. Prompt for your Lunch Money API key
-4. Let you map each bank account to a Lunch Money asset using an interactive picker (↑/↓ to navigate, Enter to select)
-5. Save configuration to `~/.config/lunchsync-sg/config.json`
-
-### 3. Download Bank Exports
+### 2. Download Bank Exports
 
 Download transaction exports from your bank's website:
 
@@ -49,6 +34,21 @@ Download transaction exports from your bank's website:
 | Citi | Citibank Online → Cards → Download Transaction History |
 
 Put all downloaded files in a folder (e.g., `~/Downloads/bank-exports/`).
+
+### 3. Run Setup
+
+Run setup with your bank export files to auto-detect accounts and map them to Lunch Money:
+
+```bash
+lunchsync-sg --setup ~/Downloads/bank-exports/
+```
+
+The setup wizard will:
+1. Scan your bank export files to auto-detect accounts
+2. Prompt for your Lunch Money API key
+3. Fetch your Lunch Money assets
+4. Let you map each bank account to a Lunch Money asset using an interactive picker (↑/↓ to navigate, Enter to select)
+5. Save configuration to `~/.config/lunchsync-sg/config.json`
 
 ### 4. Upload Transactions
 
