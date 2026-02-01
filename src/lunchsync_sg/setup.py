@@ -1,5 +1,8 @@
 """Interactive setup wizard for lunchsync-sg."""
 
+import sys
+import termios
+import tty
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +22,108 @@ def mask_card_number(card_number: str) -> str:
     if len(clean) > 4:
         return f"****{clean[-4:]}"
     return card_number
+
+
+def _get_key() -> str:
+    """Read a single keypress from stdin."""
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+        # Handle escape sequences (arrow keys)
+        if ch == "\x1b":
+            ch2 = sys.stdin.read(1)
+            if ch2 == "[":
+                ch3 = sys.stdin.read(1)
+                if ch3 == "A":
+                    return "up"
+                elif ch3 == "B":
+                    return "down"
+        return ch
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def interactive_picker(
+    options: list[str],
+    prompt: str = "Select an option:",
+    allow_skip: bool = True,
+) -> int | None:
+    """Interactive arrow-key picker for selecting from a list.
+
+    Args:
+        options: List of option strings to display
+        prompt: Header prompt to show
+        allow_skip: Whether to allow skipping (pressing 's')
+
+    Returns:
+        Index of selected option, or None if skipped
+    """
+    if not options:
+        return None
+
+    selected = 0
+    num_options = len(options)
+
+    # ANSI escape codes
+    clear_line = "\033[2K"
+    move_up = "\033[A"
+    hide_cursor = "\033[?25l"
+    show_cursor = "\033[?25h"
+    bold = "\033[1m"
+    cyan = "\033[36m"
+    reset = "\033[0m"
+
+    def render() -> None:
+        """Render the picker UI."""
+        lines = []
+        for i, opt in enumerate(options):
+            if i == selected:
+                lines.append(f"  {bold}{cyan}❯ {opt}{reset}")
+            else:
+                lines.append(f"    {opt}")
+        if allow_skip:
+            lines.append(f"\n  {bold}s{reset} = skip")
+        lines.append("  Use ↑/↓ to navigate, Enter to select")
+        print("\n".join(lines), end="", flush=True)
+
+    def clear_render() -> None:
+        """Clear the rendered picker."""
+        total_lines = num_options + (2 if allow_skip else 1)
+        for _ in range(total_lines):
+            print(f"{move_up}{clear_line}", end="")
+        print("\r", end="")
+
+    print(prompt)
+    print(hide_cursor, end="", flush=True)
+
+    try:
+        render()
+
+        while True:
+            key = _get_key()
+
+            if key == "up":
+                clear_render()
+                selected = (selected - 1) % num_options
+                render()
+            elif key == "down":
+                clear_render()
+                selected = (selected + 1) % num_options
+                render()
+            elif key == "\r" or key == "\n":  # Enter
+                clear_render()
+                print(f"  {bold}{cyan}✓ {options[selected]}{reset}")
+                return selected
+            elif key.lower() == "s" and allow_skip:
+                clear_render()
+                print(f"  {bold}Skipped{reset}")
+                return None
+            elif key == "\x03":  # Ctrl+C
+                raise KeyboardInterrupt
+    finally:
+        print(show_cursor, end="", flush=True)
 
 
 def scan_files_for_accounts(paths: list[Path]) -> list[DetectedAccount]:
@@ -159,9 +264,7 @@ def run_setup(
         print("Create assets at https://my.lunchmoney.app/ then run setup again.")
         return config
 
-    print(f"Found {len(assets)} asset(s):\n")
-    for i, asset in enumerate(assets, 1):
-        print(f"  [{i}] {asset['name']}")
+    print(f"Found {len(assets)} asset(s).")
 
     # Step 4: Map accounts to assets
     if detected_accounts:
@@ -171,44 +274,33 @@ def run_setup(
         print("\nFor each bank account, select the Lunch Money asset it maps to.")
         print("The asset name will be used as the account name.\n")
 
+        asset_names = [asset["name"] for asset in assets]
         accounts_config: list[dict[str, str]] = []
         account_mapping: dict[str, int] = {}
 
         for acc in detected_accounts:
             masked = mask_card_number(acc.card_number) if acc.card_number else "(no number)"
-            print(f"{acc.display_hint} ({masked}):")
+            prompt = f"{acc.display_hint} ({masked}):"
 
-            while True:
-                choice = input(f"  Select asset [1-{len(assets)}] or 's' to skip: ").strip()
+            selected_idx = interactive_picker(asset_names, prompt=prompt, allow_skip=True)
 
-                if choice.lower() == "s":
-                    print("  Skipped.\n")
-                    break
+            if selected_idx is not None:
+                asset = assets[selected_idx]
+                asset_name: str = asset["name"]
+                asset_id: int = asset["id"]
 
-                try:
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(assets):
-                        asset = assets[idx]
-                        asset_name: str = asset["name"]
-                        asset_id: int = asset["id"]
+                # Add to accounts config
+                accounts_config.append({
+                    "card_number": acc.card_number,
+                    "name": asset_name,
+                    "bank": acc.bank,
+                    "type": acc.account_type,
+                })
 
-                        # Add to accounts config
-                        accounts_config.append({
-                            "card_number": acc.card_number,
-                            "name": asset_name,
-                            "bank": acc.bank,
-                            "type": acc.account_type,
-                        })
+                # Add to Lunch Money mapping
+                account_mapping[asset_name] = asset_id
 
-                        # Add to Lunch Money mapping
-                        account_mapping[asset_name] = asset_id
-
-                        print(f"  → {asset_name}\n")
-                        break
-                    else:
-                        print(f"  Invalid. Enter 1-{len(assets)} or 's' to skip.")
-                except ValueError:
-                    print(f"  Invalid. Enter 1-{len(assets)} or 's' to skip.")
+            print()  # Add spacing between accounts
 
         # Update config
         config["accounts"] = accounts_config
