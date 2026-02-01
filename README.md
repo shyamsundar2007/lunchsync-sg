@@ -1,146 +1,153 @@
 # LunchSync SG
 
-Normalize bank transaction exports from multiple Singapore banks into a unified CSV format.
+Sync bank transactions from Singapore banks to [Lunch Money](https://lunchmoney.app). Parses CSV/XLS exports from multiple banks and uploads them directly via the Lunch Money API.
 
 ## Supported Banks
 
 - **OCBC**: Credit Card, 360 Account
-- **DBS**: Savings Account, Credit Card (MasterCard World)
+- **DBS**: Savings Account, Credit Card
 - **UOB**: Lady's Solitaire, Preferred Platinum VISA
 - **HSBC**: Revolution Card
 - **Citibank**: Rewards, Prestige
 
-## Installation
+## Quick Start
+
+### 1. Install
 
 ```bash
-# Using uv (recommended)
+# Clone and install
+git clone https://github.com/shyamsundar2007/lunchsync-sg.git
+cd lunchsync-sg
 uv pip install -e .
-
-# Or with dev dependencies
-uv pip install -e ".[dev]"
 ```
 
-## Usage
+### 2. Download Bank Exports
 
-### Command Line
+Download transaction exports from your bank's website:
+
+| Bank | Where to Download |
+|------|-------------------|
+| OCBC | Internet Banking → Cards/Accounts → Download Statement (CSV) |
+| DBS | digibank → Cards/Accounts → Transaction History → Download |
+| UOB | Personal Internet Banking → Cards → Download Statement (XLS) |
+| HSBC | Online Banking → Credit Cards → Download Transactions |
+| Citi | Citibank Online → Cards → Download Transaction History |
+
+Put all downloaded files in a folder (e.g., `~/Downloads/bank-exports/`).
+
+### 3. Set Up Account Mappings
+
+Create a config file to map your account numbers to friendly names:
 
 ```bash
-# Process a directory of bank exports
-lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
-
-# Process specific files
-lunchsync-sg ocbc.csv dbs.xls uob.xls -o output.csv
-
-# List available parsers
-lunchsync-sg --list-parsers
-
-# Full output with all fields
-lunchsync-sg --full input.csv -o output.csv
+mkdir -p ~/.config/lunchsync-sg
+nano ~/.config/lunchsync-sg/.env
 ```
 
-### As a Library
+Add your account mappings (get identifiers from your bank export files):
 
-```python
-from pathlib import Path
-from lunchsync_sg import BankNormalizer
-
-normalizer = BankNormalizer()
-
-# Process files
-transactions = normalizer.process_files([
-    Path("ocbc.csv"),
-    Path("dbs.csv"),
-])
-
-# Or process a directory
-transactions = normalizer.process_directory(Path("./exports"))
-
-# Write output
-normalizer.write_csv(transactions, Path("output.csv"))
-
-# Access individual transactions
-for tx in transactions:
-    print(f"{tx.date} | {tx.description} | {tx.amount} | {tx.account}")
+```bash
+# Format: account_number:Display Name:Bank:type
+ACCOUNT_MAPPINGS=5400123456781234:OCBC Rewards:OCBC:credit_card,695012345678:OCBC 360:OCBC:savings
 ```
 
-## Output Format
+### 4. Get Your Lunch Money API Key
 
-The normalized output contains:
+1. Go to [Lunch Money Developers](https://my.lunchmoney.app/developers)
+2. Create a new API key
+3. Add it to your config file:
 
-| Field | Description |
-|-------|-------------|
-| Date | Transaction date (YYYY-MM-DD) |
-| Description | Cleaned transaction description |
-| Amount | Amount in SGD (negative = expense, positive = income/credit) |
-| Account | Friendly account name |
-
-With `--full` flag, additional fields are included:
-- `original_currency`: Original transaction currency
-- `original_amount`: Amount in original currency
-- `category`: Transaction category (if available)
-- `reference`: Reference number (if available)
-
-## Adding New Banks
-
-The project uses a plugin architecture. To add a new bank:
-
-1. Create a new file in `src/lunchsync_sg/parsers/`
-2. Implement a parser class extending `BankParser`
-3. Register with `@ParserRegistry.register`
-
-Example:
-
-```python
-from lunchsync_sg.parsers.base import BankParser, ParserRegistry
-from lunchsync_sg.models import Transaction
-
-@ParserRegistry.register
-class NewBankParser(BankParser):
-    bank_name = "NewBank"
-    file_patterns = ["NewBank Statement"]
-
-    @classmethod
-    def can_parse(cls, content: str, filepath=None) -> bool:
-        return "NewBank Statement" in content
-
-    def parse(self, content: str) -> list[Transaction]:
-        transactions = []
-        # Parse logic here
-        return transactions
+```bash
+LUNCHMONEY_API_KEY=your_api_key_here
 ```
 
-4. Import in `src/lunchsync_sg/parsers/__init__.py`
-5. Add tests in `tests/test_parsers.py`
+### 5. Map Accounts to Lunch Money Assets
+
+Run the interactive setup to map your bank accounts to Lunch Money assets:
+
+```bash
+lunchsync-sg --lm-setup
+```
+
+This will show your Lunch Money assets and let you map each bank account. The mapping is saved to your config file.
+
+### 6. Upload Transactions
+
+```bash
+# Upload all bank exports to Lunch Money
+lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney
+
+# Preview what would be uploaded (dry run)
+lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run
+```
 
 ## Configuration
 
-Account mappings let you assign friendly names to your bank accounts instead of showing "Unknown (1234)".
-
-### Setup
-
-1. Copy the example config to your preferred location:
+Your `~/.config/lunchsync-sg/.env` file should look like:
 
 ```bash
-# Recommended: XDG config directory (outside project, won't be committed)
-mkdir -p ~/.config/lunchsync-sg
-cp .env.example ~/.config/lunchsync-sg/.env
+# Account mappings (from bank exports)
+ACCOUNT_MAPPINGS=5400123456781234:OCBC Rewards:OCBC:credit_card,695012345678:OCBC 360:OCBC:savings,0201234567:DBS Savings:DBS:savings
 
-# Or: project directory (add to .gitignore)
-cp .env.example .env
+# Lunch Money API
+LUNCHMONEY_API_KEY=your_api_key_here
+
+# Account to Asset mapping (generated by --lm-setup)
+LUNCHMONEY_ACCOUNT_MAP=OCBC Rewards=12345|OCBC 360=67890|DBS Savings=11111
 ```
 
-2. Edit the file with your real account identifiers (from your bank exports)
+### Finding Account Identifiers
 
-### Config Search Order
+Open your bank export file and look for the account/card number. Examples:
 
-The tool looks for `.env` files in this order:
-1. `.env` in current directory
-2. `~/.config/lunchsync-sg/.env` (XDG standard)
-3. `~/.lunchsync-sg/.env` (legacy)
+- OCBC Credit: `5400-1234-5678-1234` (use without dashes: `5400123456781234`)
+- OCBC 360: `695-012345-678`
+- DBS: `020-1-23456-7`
+- UOB: Full card number in the XLS file
+- HSBC: Last 4 digits (e.g., `3363`)
+- Citi: Full card number
 
-### Without Configuration
+## CLI Reference
 
-The tool works without any configuration - accounts will be named "Unknown (last4)" using the last 4 digits of the account number.
+```bash
+# Upload to Lunch Money
+lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney
+
+# Dry run (preview without uploading)
+lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run
+
+# Export to CSV instead (for manual import)
+lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
+
+# Export with all fields (currency, category, reference)
+lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv --full
+
+# Interactive Lunch Money setup
+lunchsync-sg --lm-setup
+
+# List available bank parsers
+lunchsync-sg --list-parsers
+
+# Verbose output
+lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney -v
+```
+
+## Troubleshooting
+
+### "Unknown (1234)" account names
+
+Your account mapping is missing or incorrect. Check:
+1. Config file exists at `~/.config/lunchsync-sg/.env`
+2. Account identifier matches what's in your bank export
+3. Run with `-v` to see which identifiers are being detected
+
+### Duplicate transactions
+
+The tool automatically deduplicates within a batch. Lunch Money also deduplicates based on the transaction reference. If you're seeing duplicates, they may have different reference numbers.
+
+### Unsupported bank format
+
+Run `lunchsync-sg --list-parsers` to see supported formats. If your bank isn't listed, the tool uses content detection - it may still work if the format is similar.
 
 ## Development
 
@@ -151,14 +158,11 @@ uv pip install -e ".[dev]"
 # Run tests
 pytest
 
-# Run tests with coverage
-pytest --cov=lunchsync_sg
+# Type check
+mypy src
 
 # Lint
 ruff check src tests
-
-# Type check
-mypy src
 ```
 
 ## License
