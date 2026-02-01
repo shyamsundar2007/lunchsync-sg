@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from lunchsync_sg.parsers import (
     CitiParser,
@@ -25,10 +26,12 @@ class TestOCBCCreditParser:
         content = read_file(ocbc_credit_file)
         assert OCBCCreditParser.can_parse(content) is True
 
-    def test_parse_transactions(self, ocbc_credit_file: Path) -> None:
+    def test_parse_transactions(
+        self, ocbc_credit_file: Path, test_config: dict[str, Any]
+    ) -> None:
         """Test parsing transactions."""
         content = read_file(ocbc_credit_file)
-        parser = OCBCCreditParser()
+        parser = OCBCCreditParser(config=test_config)
         transactions = parser.parse(content)
 
         assert len(transactions) == 2
@@ -141,10 +144,12 @@ class TestUOBCreditParser:
         content = read_file(uob_platinum_file)
         assert UOBCreditParser.can_parse(content) is True
 
-    def test_parse_solitaire(self, uob_solitaire_file: Path) -> None:
+    def test_parse_solitaire(
+        self, uob_solitaire_file: Path, test_config: dict[str, Any]
+    ) -> None:
         """Test parsing Solitaire transactions."""
         content = read_file(uob_solitaire_file)
-        parser = UOBCreditParser()
+        parser = UOBCreditParser(config=test_config)
         transactions = parser.parse(content)
 
         assert len(transactions) >= 1
@@ -194,19 +199,23 @@ class TestCitiParser:
         content = read_file(citi_prestige_file)
         assert CitiParser.can_parse(content) is True
 
-    def test_parse_rewards(self, citi_rewards_file: Path) -> None:
+    def test_parse_rewards(
+        self, citi_rewards_file: Path, test_config: dict[str, Any]
+    ) -> None:
         """Test parsing Rewards transactions."""
         content = read_file(citi_rewards_file)
-        parser = CitiParser()
+        parser = CitiParser(config=test_config)
         transactions = parser.parse(content)
 
         assert len(transactions) >= 3
         assert any("Citi Rewards" in tx.account for tx in transactions)
 
-    def test_parse_prestige(self, citi_prestige_file: Path) -> None:
+    def test_parse_prestige(
+        self, citi_prestige_file: Path, test_config: dict[str, Any]
+    ) -> None:
         """Test parsing Prestige transactions."""
         content = read_file(citi_prestige_file)
-        parser = CitiParser()
+        parser = CitiParser(config=test_config)
         transactions = parser.parse(content)
 
         assert len(transactions) >= 5

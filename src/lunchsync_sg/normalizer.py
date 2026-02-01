@@ -3,6 +3,7 @@
 import csv
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from lunchsync_sg.models import Transaction
 from lunchsync_sg.parsers.base import ParserRegistry
@@ -19,16 +20,23 @@ class BankNormalizer:
         normalizer.write_csv(transactions, Path("output.csv"))
     """
 
-    def __init__(self, deduplicate: bool = True, sort_descending: bool = True) -> None:
+    def __init__(
+        self,
+        deduplicate: bool = True,
+        sort_descending: bool = True,
+        config: dict[str, Any] | None = None,
+    ) -> None:
         """
         Initialize normalizer.
 
         Args:
             deduplicate: Remove duplicate transactions
             sort_descending: Sort by date descending (newest first)
+            config: Loaded JSON config for account mappings
         """
         self.deduplicate = deduplicate
         self.sort_descending = sort_descending
+        self.config = config
         self._errors: list[tuple[Path, str]] = []
         self._pending_skipped = 0
 
@@ -58,7 +66,7 @@ class BankNormalizer:
             self._errors.append((filepath, str(e)))
             return []
 
-        parser = ParserRegistry.get_parser(content, filepath)
+        parser = ParserRegistry.get_parser(content, filepath, config=self.config)
         if parser is None:
             self._errors.append((filepath, "No parser found for this file format"))
             return []

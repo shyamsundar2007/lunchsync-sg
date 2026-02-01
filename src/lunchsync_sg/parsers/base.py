@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from lunchsync_sg.models import Transaction
 
@@ -14,9 +14,14 @@ class BankParser(ABC):
     bank_name: ClassVar[str] = "Unknown"
     file_patterns: ClassVar[list[str]] = []  # Patterns to match in file content
 
-    def __init__(self, account_name: str | None = None) -> None:
-        """Initialize parser with optional account name override."""
+    def __init__(
+        self,
+        account_name: str | None = None,
+        config: dict[str, Any] | None = None,
+    ) -> None:
+        """Initialize parser with optional account name override and config."""
         self._account_name = account_name
+        self._config = config
 
     @classmethod
     @abstractmethod
@@ -53,7 +58,7 @@ class BankParser(ABC):
 
         from lunchsync_sg.config import get_account_name
 
-        return get_account_name(identifier)
+        return get_account_name(identifier, config=self._config)
 
 
 class ParserRegistry:
@@ -76,20 +81,26 @@ class ParserRegistry:
         return parser_class
 
     @classmethod
-    def get_parser(cls, content: str, filepath: Path | None = None) -> BankParser | None:
+    def get_parser(
+        cls,
+        content: str,
+        filepath: Path | None = None,
+        config: dict[str, Any] | None = None,
+    ) -> BankParser | None:
         """
         Get appropriate parser for the given content.
 
         Args:
             content: File content as string
             filepath: Optional filepath for extension detection
+            config: Loaded JSON config for account mappings
 
         Returns:
             Parser instance if found, None otherwise
         """
         for parser_class in cls._parsers:
             if parser_class.can_parse(content, filepath):
-                return parser_class()
+                return parser_class(config=config)
         return None
 
     @classmethod

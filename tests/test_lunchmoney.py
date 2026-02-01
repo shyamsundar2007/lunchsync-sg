@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 from lunchsync_sg.lunchmoney import (
     LunchMoneyClient,
     UploadResult,
-    format_account_mapping,
     generate_external_id,
     transaction_to_payload,
 )
@@ -131,30 +130,6 @@ class TestTransactionToPayload:
         )
         payload = transaction_to_payload(tx, asset_id=123)
         assert payload["amount"] == 5000.00
-
-
-class TestFormatAccountMapping:
-    """Tests for account mapping formatting."""
-
-    def test_format_single_mapping(self) -> None:
-        """Test formatting a single mapping."""
-        mapping = {"OCBC Credit": 12345}
-        result = format_account_mapping(mapping)
-        assert result == "OCBC Credit=12345"
-
-    def test_format_multiple_mappings(self) -> None:
-        """Test formatting multiple mappings."""
-        mapping = {"OCBC Credit": 12345, "DBS Savings": 67890}
-        result = format_account_mapping(mapping)
-        assert "OCBC Credit=12345" in result
-        assert "DBS Savings=67890" in result
-        assert "|" in result
-
-    def test_format_empty_mapping(self) -> None:
-        """Test formatting empty mapping."""
-        mapping: dict[str, int] = {}
-        result = format_account_mapping(mapping)
-        assert result == ""
 
 
 class TestLunchMoneyClient:

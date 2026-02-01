@@ -1,30 +1,36 @@
 """Pytest configuration and fixtures."""
 
-import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 # Test account mappings that match our test fixtures
 # These are fake account numbers used in test fixtures
-TEST_ACCOUNT_MAPPINGS = (
-    "5400123456780001:OCBC Rewards Test:OCBC:credit_card,"
-    "5400999988880002:OCBC Rewards Test 2:OCBC:credit_card,"
-    "695012345001:OCBC 360 Test:OCBC:savings,"
-    "0201234567:DBS Savings Test:DBS:savings,"
-    "5420123456780002:DBS World MC Test:DBS:credit_card,"
-    "5522123456780003:UOB Lady's Solitaire Test:UOB:credit_card,"
-    "4265123456780004:UOB Platinum VISA Test:UOB:credit_card,"
-    "3363:HSBC Revolution Test:HSBC:credit_card,"
-    "5425123456780005:Citi Rewards Test:Citi:credit_card,"
-    "5425987654321098:Citi Prestige Test:Citi:credit_card"
-)
+TEST_CONFIG: dict[str, Any] = {
+    "accounts": [
+        {"card_number": "5400123456780001", "name": "OCBC Rewards Test", "bank": "OCBC", "type": "credit_card"},
+        {"card_number": "5400999988880002", "name": "OCBC Rewards Test 2", "bank": "OCBC", "type": "credit_card"},
+        {"card_number": "695012345001", "name": "OCBC 360 Test", "bank": "OCBC", "type": "savings"},
+        {"card_number": "0201234567", "name": "DBS Savings Test", "bank": "DBS", "type": "savings"},
+        {"card_number": "5420123456780002", "name": "DBS World MC Test", "bank": "DBS", "type": "credit_card"},
+        {"card_number": "5522123456780003", "name": "UOB Lady's Solitaire Test", "bank": "UOB", "type": "credit_card"},
+        {"card_number": "4265123456780004", "name": "UOB Platinum VISA Test", "bank": "UOB", "type": "credit_card"},
+        {"card_number": "3363", "name": "HSBC Revolution Test", "bank": "HSBC", "type": "credit_card"},
+        {"card_number": "5425123456780005", "name": "Citi Rewards Test", "bank": "Citi", "type": "credit_card"},
+        {"card_number": "5425987654321098", "name": "Citi Prestige Test", "bank": "Citi", "type": "credit_card"},
+    ],
+    "lunch_money": {
+        "api_key": None,
+        "account_mapping": {},
+    },
+}
 
 
-@pytest.fixture(autouse=True)
-def test_account_mappings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Set up test account mappings for all parser tests."""
-    monkeypatch.setenv("ACCOUNT_MAPPINGS", TEST_ACCOUNT_MAPPINGS)
+@pytest.fixture
+def test_config() -> dict[str, Any]:
+    """Return test configuration."""
+    return TEST_CONFIG.copy()
 
 
 @pytest.fixture
