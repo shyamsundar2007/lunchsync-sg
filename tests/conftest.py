@@ -1,8 +1,30 @@
 """Pytest configuration and fixtures."""
 
+import os
 from pathlib import Path
 
 import pytest
+
+# Test account mappings that match our test fixtures
+# These are fake account numbers used in test fixtures
+TEST_ACCOUNT_MAPPINGS = (
+    "5400123456780001:OCBC Rewards Test:OCBC:credit_card,"
+    "5400999988880002:OCBC Rewards Test 2:OCBC:credit_card,"
+    "695012345001:OCBC 360 Test:OCBC:savings,"
+    "0201234567:DBS Savings Test:DBS:savings,"
+    "5420123456780002:DBS World MC Test:DBS:credit_card,"
+    "5522123456780003:UOB Lady's Solitaire Test:UOB:credit_card,"
+    "4265123456780004:UOB Platinum VISA Test:UOB:credit_card,"
+    "3363:HSBC Revolution Test:HSBC:credit_card,"
+    "5425123456780005:Citi Rewards Test:Citi:credit_card,"
+    "5425987654321098:Citi Prestige Test:Citi:credit_card"
+)
+
+
+@pytest.fixture(autouse=True)
+def test_account_mappings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set up test account mappings for all parser tests."""
+    monkeypatch.setenv("ACCOUNT_MAPPINGS", TEST_ACCOUNT_MAPPINGS)
 
 
 @pytest.fixture

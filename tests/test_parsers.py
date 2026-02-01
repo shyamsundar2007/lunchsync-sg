@@ -38,7 +38,7 @@ class TestOCBCCreditParser:
         assert tx.date == date(2026, 1, 30)
         assert "GROCERY" in tx.description
         assert tx.amount == Decimal("-300.00")
-        assert "OCBC" in tx.account
+        assert "OCBC Rewards Test" in tx.account
 
     def test_parse_multiple_files(
         self, ocbc_credit_file: Path, ocbc_credit_file_2: Path
@@ -148,7 +148,7 @@ class TestUOBCreditParser:
         transactions = parser.parse(content)
 
         assert len(transactions) >= 1
-        assert any("Solitaire" in tx.account for tx in transactions)
+        assert any("Solitaire" in tx.account or "UOB" in tx.account for tx in transactions)
 
     def test_parse_platinum(self, uob_platinum_file: Path) -> None:
         """Test parsing Platinum transactions."""

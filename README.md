@@ -114,11 +114,33 @@ class NewBankParser(BankParser):
 
 ## Configuration
 
-Copy `.env.example` to `.env` to customize account mappings:
+Account mappings let you assign friendly names to your bank accounts instead of showing "Unknown (1234)".
+
+### Setup
+
+1. Copy the example config to your preferred location:
 
 ```bash
+# Recommended: XDG config directory (outside project, won't be committed)
+mkdir -p ~/.config/lunchsync-sg
+cp .env.example ~/.config/lunchsync-sg/.env
+
+# Or: project directory (add to .gitignore)
 cp .env.example .env
 ```
+
+2. Edit the file with your real account identifiers (from your bank exports)
+
+### Config Search Order
+
+The tool looks for `.env` files in this order:
+1. `.env` in current directory
+2. `~/.config/lunchsync-sg/.env` (XDG standard)
+3. `~/.lunchsync-sg/.env` (legacy)
+
+### Without Configuration
+
+The tool works without any configuration - accounts will be named "Unknown (last4)" using the last 4 digits of the account number.
 
 ## Development
 

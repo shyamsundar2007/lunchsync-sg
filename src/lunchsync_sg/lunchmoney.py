@@ -144,14 +144,15 @@ class LunchMoneyClient:
 
 
 def get_known_accounts() -> list[str]:
-    """Get list of known account names from all registered parsers.
+    """Get list of known account names from configured mappings.
 
-    This inspects the DEFAULT_ACCOUNT_MAPPINGS from config to get
-    account names that parsers might generate.
+    Returns account names from ACCOUNT_MAPPINGS environment variable.
+    Returns empty list if no mappings are configured.
     """
-    from lunchsync_sg.config import DEFAULT_ACCOUNT_MAPPINGS
+    from lunchsync_sg.config import get_account_mappings
 
-    return [mapping.name for mapping in DEFAULT_ACCOUNT_MAPPINGS]
+    mappings = get_account_mappings()
+    return [mapping.name for mapping in mappings]
 
 
 def interactive_setup(api_key: str) -> dict[str, int]:

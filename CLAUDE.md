@@ -64,3 +64,8 @@ The `ParserRegistry` auto-detects the appropriate parser for each file based on 
 - **mypy strict mode** - All code must be properly typed
 - **ruff** - Line length 100, rules: E, F, I, N, W, UP, B, C4, SIM
 - **Python 3.11+** compatibility required
+
+## Git Commits
+
+- Use conventional commits format (e.g., `feat:`, `fix:`, `refactor:`)
+- Do NOT add `Co-Authored-By` lines to commits

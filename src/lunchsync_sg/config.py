@@ -9,64 +9,60 @@ from lunchsync_sg.models import AccountMapping
 
 
 def load_config(env_path: Path | None = None) -> None:
-    """Load configuration from .env file."""
+    """Load configuration from .env file.
+
+    Searches for config in the following order:
+    1. Explicit path if provided
+    2. .env in current directory
+    3. XDG config: ~/.config/lunchsync-sg/.env
+    4. Legacy: ~/.lunchsync-sg/.env
+    """
     if env_path:
         load_dotenv(env_path)
-    else:
-        # Try common locations
-        for path in [Path(".env"), Path.home() / ".lunchsync-sg" / ".env"]:
-            if path.exists():
-                load_dotenv(path)
-                break
+        return
+
+    xdg_config_home = os.getenv("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+
+    config_paths = [
+        Path(".env"),
+        Path(xdg_config_home) / "lunchsync-sg" / ".env",
+        Path.home() / ".lunchsync-sg" / ".env",
+    ]
+
+    for path in config_paths:
+        if path.exists():
+            load_dotenv(path)
+            return
 
 
 def get_account_mappings() -> list[AccountMapping]:
     """
-    Get account mappings from environment or defaults.
+    Get account mappings from environment.
+
+    Returns empty list if no mappings configured - the tool will use
+    "Unknown (last4)" naming for unrecognized accounts.
 
     Format in .env:
     ACCOUNT_MAPPINGS=identifier1:name1:bank1:type1,identifier2:name2:bank2:type2
     """
     mappings_str = os.getenv("ACCOUNT_MAPPINGS", "")
 
-    if mappings_str:
-        mappings = []
-        for entry in mappings_str.split(","):
-            parts = entry.strip().split(":")
-            if len(parts) >= 3:
-                mappings.append(
-                    AccountMapping(
-                        identifier=parts[0],
-                        name=parts[1],
-                        bank=parts[2],
-                        account_type=parts[3] if len(parts) > 3 else "credit_card",
-                    )
+    if not mappings_str:
+        return []
+
+    mappings = []
+    for entry in mappings_str.split(","):
+        parts = entry.strip().split(":")
+        if len(parts) >= 3:
+            mappings.append(
+                AccountMapping(
+                    identifier=parts[0],
+                    name=parts[1],
+                    bank=parts[2],
+                    account_type=parts[3] if len(parts) > 3 else "credit_card",
                 )
-        return mappings
-
-    # Default mappings
-    return DEFAULT_ACCOUNT_MAPPINGS
-
-
-# Default account mappings - these are example/fake numbers for testing
-# Users should configure their own mappings via ACCOUNT_MAPPINGS env var
-# Note: Each card should have unique last 4 digits to avoid matching conflicts
-DEFAULT_ACCOUNT_MAPPINGS: list[AccountMapping] = [
-    # OCBC
-    AccountMapping("5400123456780001", "OCBC Rewards", "OCBC", "credit_card"),
-    AccountMapping("695012345001", "OCBC 360", "OCBC", "savings"),
-    # DBS
-    AccountMapping("0201234567", "DBS Savings", "DBS", "savings"),
-    AccountMapping("5420123456780002", "DBS World MC", "DBS", "credit_card"),
-    # UOB
-    AccountMapping("5522123456780003", "UOB Lady's Solitaire", "UOB", "credit_card"),
-    AccountMapping("4265123456780004", "UOB Platinum VISA", "UOB", "credit_card"),
-    # HSBC
-    AccountMapping("3363", "HSBC Revolution", "HSBC", "credit_card"),
-    # Citi
-    AccountMapping("5425123456780005", "Citi Rewards", "Citi", "credit_card"),
-    AccountMapping("5425987654321098", "Citi Prestige", "Citi", "credit_card"),
-]
+            )
+    return mappings
 
 
 def get_lunchmoney_api_key(override: str | None = None) -> str | None:
