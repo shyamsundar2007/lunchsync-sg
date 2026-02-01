@@ -187,6 +187,18 @@ mypy src
 ruff check src tests
 ```
 
+## Disclaimer
+
+This software is provided "as is" without warranty of any kind. By using this tool, you acknowledge that:
+
+- **Not affiliated**: This project is not affiliated with, endorsed by, or connected to any bank (OCBC, DBS, UOB, HSBC, Citibank) or Lunch Money. All trademarks belong to their respective owners.
+- **Your responsibility**: You are solely responsible for your financial data. Always verify transactions before relying on the output.
+- **No guarantee**: Bank export formats may change at any time, which could cause parsing errors. Always review the output.
+- **API keys**: Keep your Lunch Money API key secure. The tool stores it locally in your config file.
+- **Data privacy**: This tool processes your data locally. No data is sent anywhere except to Lunch Money when you explicitly use the `--upload-lunchmoney` option.
+
+Use at your own risk. The authors are not responsible for any financial discrepancies, data loss, or other issues arising from use of this software.
+
 ## License
 
-MIT
+MIT - See [LICENSE](LICENSE) for details.
