@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from lunchsync_sg.models import Transaction
-from lunchsync_sg.parsers.base import BankParser, ParserRegistry
+from lunchsync_sg.parsers.base import BankParser, DetectedAccount, ParserRegistry
 from lunchsync_sg.utils import clean_description, parse_amount, parse_date
 
 
@@ -16,12 +16,27 @@ class DBSSavingsParser(BankParser):
     """Parser for DBS Savings Account CSV exports."""
 
     bank_name: ClassVar[str] = "DBS"
+    account_type: ClassVar[str] = "savings"
     file_patterns: ClassVar[list[str]] = ["DBS Savings Account"]
 
     @classmethod
     def can_parse(cls, content: str, filepath: Path | None = None) -> bool:
         """Check if content is DBS savings account format."""
         return "DBS Savings Account" in content and "Transaction Code" in content
+
+    @classmethod
+    def detect_account(cls, content: str) -> DetectedAccount | None:
+        """Detect DBS savings account from content."""
+        for line in content.split("\n")[:10]:
+            match = re.search(r"DBS Savings Account\s+(\d{3}-\d-\d{6})", line)
+            if match:
+                return DetectedAccount(
+                    card_number=match.group(1),
+                    bank=cls.bank_name,
+                    account_type=cls.account_type,
+                    display_hint="DBS Savings Account",
+                )
+        return None
 
     def parse(self, content: str) -> list[Transaction]:
         """Parse DBS savings account transactions."""
@@ -95,6 +110,7 @@ class DBSCreditParser(BankParser):
     """Parser for DBS Credit Card CSV exports."""
 
     bank_name: ClassVar[str] = "DBS"
+    account_type: ClassVar[str] = "credit_card"
     file_patterns: ClassVar[list[str]] = ["DBS MasterCard", "DBS Credit Card"]
 
     @classmethod
@@ -103,6 +119,20 @@ class DBSCreditParser(BankParser):
         return (
             "DBS MasterCard" in content or "Card Transaction Details" in content
         ) and "Transaction Posting Date" in content
+
+    @classmethod
+    def detect_account(cls, content: str) -> DetectedAccount | None:
+        """Detect DBS credit card account from content."""
+        for line in content.split("\n")[:10]:
+            match = re.search(r"(\d{4}-\d{4}-\d{4}-\d{4})", line)
+            if match:
+                return DetectedAccount(
+                    card_number=match.group(1),
+                    bank=cls.bank_name,
+                    account_type=cls.account_type,
+                    display_hint="DBS Credit Card",
+                )
+        return None
 
     def parse(self, content: str) -> list[Transaction]:
         """Parse DBS credit card transactions."""

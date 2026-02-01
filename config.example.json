@@ -1,0 +1,20 @@
+{
+  "accounts": [
+    {
+      "card_number": "5400-XXXX-XXXX-1234",
+      "name": "My OCBC Card",
+      "bank": "OCBC",
+      "type": "credit_card"
+    },
+    {
+      "card_number": "XXX-XXXXXX-XXX",
+      "name": "My DBS Savings",
+      "bank": "DBS",
+      "type": "savings"
+    }
+  ],
+  "lunch_money": {
+    "api_key": null,
+    "account_mapping": {}
+  }
+}

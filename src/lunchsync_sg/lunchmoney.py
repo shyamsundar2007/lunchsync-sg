@@ -2,7 +2,6 @@
 
 import hashlib
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import requests
@@ -143,29 +142,42 @@ class LunchMoneyClient:
         return UploadResult(uploaded=uploaded, skipped=skipped, errors=errors)
 
 
-def get_known_accounts() -> list[str]:
+def get_known_accounts(config: dict[str, Any] | None = None) -> list[str]:
     """Get list of known account names from configured mappings.
 
-    Returns account names from ACCOUNT_MAPPINGS environment variable.
-    Returns empty list if no mappings are configured.
+    Args:
+        config: Loaded JSON config
+
+    Returns:
+        List of account names
     """
     from lunchsync_sg.config import get_account_mappings
 
-    mappings = get_account_mappings()
+    mappings = get_account_mappings(config)
     return [mapping.name for mapping in mappings]
 
 
-def interactive_setup(api_key: str) -> dict[str, int]:
-    """Run interactive account mapping setup.
+def interactive_lm_setup(
+    api_key: str,
+    config: dict[str, Any] | None = None,
+) -> dict[str, int]:
+    """Run interactive Lunch Money account mapping setup.
 
     Prompts the user to map each known bank account to a Lunch Money asset.
 
     Args:
         api_key: Lunch Money API key
+        config: Existing config to update
 
     Returns:
         Dictionary mapping account names to asset IDs
     """
+    from lunchsync_sg.config import (
+        get_config_path,
+        load_config,
+        save_json_config,
+    )
+
     print("\nLunch Money Setup")
     print("=================\n")
 
@@ -187,8 +199,18 @@ def interactive_setup(api_key: str) -> dict[str, int]:
     for i, asset in enumerate(assets, 1):
         print(f"  [{i}] {asset['name']} (id: {asset['id']})")
 
-    bank_accounts = get_known_accounts()
-    print("\nBank accounts found in this tool:")
+    # Load config if not provided
+    if config is None:
+        config = load_config()
+
+    bank_accounts = get_known_accounts(config)
+
+    if not bank_accounts:
+        print("\nNo bank accounts configured.")
+        print("Run 'lunchsync-sg --setup' first to add your bank accounts.")
+        return {}
+
+    print("\nBank accounts found in config:")
     for account in bank_accounts:
         print(f"  - {account}")
 
@@ -215,57 +237,13 @@ def interactive_setup(api_key: str) -> dict[str, int]:
                 print("  Invalid input. Enter a number or 's' to skip.")
 
     # Save configuration
-    if mapping:
-        env_path = save_account_mapping(mapping, api_key)
-        print(f"\nConfiguration saved to {env_path}")
-        print(f"\nLUNCHMONEY_ACCOUNT_MAP={format_account_mapping(mapping)}")
+    if mapping and config:
+        if "lunch_money" not in config:
+            config["lunch_money"] = {}
+        config["lunch_money"]["api_key"] = api_key
+        config["lunch_money"]["account_mapping"] = mapping
+
+        config_path = save_json_config(config, get_config_path())
+        print(f"\nConfiguration saved to {config_path}")
 
     return mapping
-
-
-def format_account_mapping(mapping: dict[str, int]) -> str:
-    """Format account mapping as env var string.
-
-    Uses pipe separator to avoid issues with commas/colons in account names.
-    """
-    return "|".join(f"{name}={asset_id}" for name, asset_id in mapping.items())
-
-
-def save_account_mapping(mapping: dict[str, int], api_key: str | None = None) -> Path:
-    """Save account mapping to config file.
-
-    Creates or updates .env in the current directory.
-    """
-    env_file = Path.cwd() / ".env"
-
-    # Read existing content
-    existing_lines: list[str] = []
-    if env_file.exists():
-        existing_lines = env_file.read_text().splitlines()
-
-    # Update or add mapping
-    new_lines: list[str] = []
-    found_mapping = False
-    found_api_key = False
-
-    for line in existing_lines:
-        if line.startswith("LUNCHMONEY_ACCOUNT_MAP="):
-            new_lines.append(f"LUNCHMONEY_ACCOUNT_MAP={format_account_mapping(mapping)}")
-            found_mapping = True
-        elif line.startswith("LUNCHMONEY_API_KEY="):
-            if api_key:
-                new_lines.append(f"LUNCHMONEY_API_KEY={api_key}")
-            else:
-                new_lines.append(line)
-            found_api_key = True
-        else:
-            new_lines.append(line)
-
-    if not found_api_key and api_key:
-        new_lines.append(f"LUNCHMONEY_API_KEY={api_key}")
-
-    if not found_mapping:
-        new_lines.append(f"LUNCHMONEY_ACCOUNT_MAP={format_account_mapping(mapping)}")
-
-    env_file.write_text("\n".join(new_lines) + "\n")
-    return env_file

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from lunchsync_sg.models import Transaction
-from lunchsync_sg.parsers.base import BankParser, ParserRegistry
+from lunchsync_sg.parsers.base import BankParser, DetectedAccount, ParserRegistry
 from lunchsync_sg.utils import clean_description, parse_amount, parse_date
 
 
@@ -16,6 +16,7 @@ class OCBCCreditParser(BankParser):
     """Parser for OCBC Credit Card CSV exports."""
 
     bank_name: ClassVar[str] = "OCBC"
+    account_type: ClassVar[str] = "credit_card"
     file_patterns: ClassVar[list[str]] = ["OCBC Rewards Card", "OCBC Credit Card"]
 
     @classmethod
@@ -24,6 +25,20 @@ class OCBCCreditParser(BankParser):
         return (
             "OCBC Rewards Card" in content or "OCBC Credit Card" in content
         ) and "Transaction date,Description,Withdrawals" in content
+
+    @classmethod
+    def detect_account(cls, content: str) -> DetectedAccount | None:
+        """Detect OCBC credit card account from content."""
+        for line in content.split("\n")[:10]:
+            match = re.search(r"(\d{4}-\d{4}-\d{4}-\d{4})", line)
+            if match:
+                return DetectedAccount(
+                    card_number=match.group(1),
+                    bank=cls.bank_name,
+                    account_type=cls.account_type,
+                    display_hint="OCBC Credit Card",
+                )
+        return None
 
     def parse(self, content: str) -> list[Transaction]:
         """Parse OCBC credit card transactions."""
@@ -91,12 +106,27 @@ class OCBC360Parser(BankParser):
     """Parser for OCBC 360 Account CSV exports."""
 
     bank_name: ClassVar[str] = "OCBC"
+    account_type: ClassVar[str] = "savings"
     file_patterns: ClassVar[list[str]] = ["360 Account"]
 
     @classmethod
     def can_parse(cls, content: str, filepath: Path | None = None) -> bool:
         """Check if content is OCBC 360 account format."""
         return "360 Account" in content and "Transaction date,Value date,Description" in content
+
+    @classmethod
+    def detect_account(cls, content: str) -> DetectedAccount | None:
+        """Detect OCBC 360 account from content."""
+        for line in content.split("\n")[:10]:
+            match = re.search(r"(\d{3}-\d{6}-\d{3})", line)
+            if match:
+                return DetectedAccount(
+                    card_number=match.group(1),
+                    bank=cls.bank_name,
+                    account_type=cls.account_type,
+                    display_hint="OCBC 360 Account",
+                )
+        return None
 
     def parse(self, content: str) -> list[Transaction]:
         """Parse OCBC 360 account transactions."""

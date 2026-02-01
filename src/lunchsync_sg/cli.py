@@ -4,8 +4,10 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from lunchsync_sg.config import (
+    config_exists,
     get_lunchmoney_account_mapping,
     get_lunchmoney_api_key,
     load_config,
@@ -22,8 +24,10 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  lunchsync-sg --setup ~/Downloads/bank-exports/
   lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
-  lunchsync-sg file1.csv file2.xls file3.csv -o output.csv
+  lunchsync-sg ~/Downloads/ --upload-lunchmoney
+  lunchsync-sg ~/Downloads/ --upload-lunchmoney --dry-run
   lunchsync-sg --list-parsers
 
 Supported banks:
@@ -68,9 +72,9 @@ Supported banks:
         help="Don't sort by date",
     )
     parser.add_argument(
-        "--env",
+        "--config",
         type=Path,
-        help="Path to .env file for configuration",
+        help="Path to config.json file",
     )
     parser.add_argument(
         "--list-parsers",
@@ -84,6 +88,18 @@ Supported banks:
         help="Verbose output",
     )
 
+    # Setup
+    parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Run interactive setup wizard to configure accounts",
+    )
+    parser.add_argument(
+        "--show-config",
+        action="store_true",
+        help="Show current configuration",
+    )
+
     # Lunch Money integration
     parser.add_argument(
         "--upload-lunchmoney",
@@ -92,7 +108,7 @@ Supported banks:
     )
     parser.add_argument(
         "--lm-api-key",
-        help="Lunch Money API key (or set LUNCHMONEY_API_KEY)",
+        help="Lunch Money API key (or configure in config.json)",
     )
     parser.add_argument(
         "--lm-setup",
@@ -107,8 +123,27 @@ Supported banks:
 
     args = parser.parse_args()
 
+    # Handle setup first (before loading config)
+    if args.setup:
+        from lunchsync_sg.setup import run_setup
+
+        input_paths = [Path(p) for p in args.inputs] if args.inputs else None
+        run_setup(input_paths=input_paths, api_key=args.lm_api_key)
+        return 0
+
     # Load configuration
-    load_config(args.env)
+    config: dict[str, Any] | None = load_config(args.config)
+
+    # Handle show-config
+    if args.show_config:
+        from lunchsync_sg.setup import show_current_config
+
+        if config:
+            show_current_config(config)
+        else:
+            print("No configuration found.")
+            print("Run 'lunchsync-sg --setup' to create one.")
+        return 0
 
     # List parsers and exit
     if args.list_parsers:
@@ -121,19 +156,27 @@ Supported banks:
 
     # Handle Lunch Money setup
     if args.lm_setup:
-        from lunchsync_sg.lunchmoney import interactive_setup
+        from lunchsync_sg.lunchmoney import interactive_lm_setup
 
-        api_key = get_lunchmoney_api_key(args.lm_api_key)
+        api_key = get_lunchmoney_api_key(config, args.lm_api_key)
         if not api_key:
-            print("Error: API key required. Use --lm-api-key or set LUNCHMONEY_API_KEY",
+            print("Error: API key required. Use --lm-api-key or configure in config.json",
                   file=sys.stderr)
             return 1
 
         try:
-            interactive_setup(api_key)
+            interactive_lm_setup(api_key, config)
         except Exception as e:
             print(f"Error during setup: {e}", file=sys.stderr)
             return 1
+        return 0
+
+    # Check if first run (no config and no inputs)
+    if not config_exists() and not args.inputs:
+        print("Welcome to lunchsync-sg!")
+        print("\nNo configuration found. To set up, run:")
+        print("  lunchsync-sg --setup ~/Downloads/bank-exports/")
+        print("\nThis will scan your bank export files and guide you through setup.")
         return 0
 
     # Check for input files
@@ -162,6 +205,7 @@ Supported banks:
     normalizer = BankNormalizer(
         deduplicate=not args.no_dedup,
         sort_descending=not args.no_sort,
+        config=config,
     )
 
     transactions = normalizer.process_files(files)
@@ -181,18 +225,18 @@ Supported banks:
 
     # Handle Lunch Money upload
     if args.upload_lunchmoney:
-        from lunchsync_sg.lunchmoney import LunchMoneyClient
+        from lunchsync_sg.lunchmoney import LunchMoneyClient, generate_external_id
 
-        api_key = get_lunchmoney_api_key(args.lm_api_key)
+        api_key = get_lunchmoney_api_key(config, args.lm_api_key)
         if not api_key:
-            print("Error: API key required. Use --lm-api-key or set LUNCHMONEY_API_KEY",
+            print("Error: API key required. Use --lm-api-key or configure in config.json",
                   file=sys.stderr)
             return 1
 
-        account_mapping = get_lunchmoney_account_mapping()
+        account_mapping = get_lunchmoney_account_mapping(config)
         if not account_mapping:
             print("Error: No account mapping configured.", file=sys.stderr)
-            print("Run 'lunchsync-sg --lm-setup' to configure account mappings.",
+            print("Run 'lunchsync-sg --setup' or 'lunchsync-sg --lm-setup' to configure.",
                   file=sys.stderr)
             return 1
 
@@ -215,8 +259,6 @@ Supported banks:
                   file=sys.stderr)
 
         if args.dry_run:
-            from lunchsync_sg.lunchmoney import generate_external_id
-
             # Group transactions by account
             by_account: dict[str, list[Transaction]] = {}
             for tx in transactions:

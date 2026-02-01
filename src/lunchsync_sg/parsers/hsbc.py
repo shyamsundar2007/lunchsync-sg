@@ -2,11 +2,12 @@
 
 import csv
 import io
+import re
 from pathlib import Path
 from typing import ClassVar
 
 from lunchsync_sg.models import Transaction
-from lunchsync_sg.parsers.base import BankParser, ParserRegistry
+from lunchsync_sg.parsers.base import BankParser, DetectedAccount, ParserRegistry
 from lunchsync_sg.utils import clean_description, parse_amount, parse_date
 
 
@@ -15,6 +16,7 @@ class HSBCRevolutionParser(BankParser):
     """Parser for HSBC Revolution Card CSV exports."""
 
     bank_name: ClassVar[str] = "HSBC"
+    account_type: ClassVar[str] = "credit_card"
     file_patterns: ClassVar[list[str]] = ["3363", "HSBC"]
 
     @classmethod
@@ -26,6 +28,28 @@ class HSBCRevolutionParser(BankParser):
             "•••• •••• •••• 3363" in content
             or ("PYMT @ AXS" in content.upper() and "3363" in content)
         )
+
+    @classmethod
+    def detect_account(cls, content: str) -> DetectedAccount | None:
+        """Detect HSBC Revolution account from content."""
+        # HSBC shows masked card numbers, try to find last 4 digits
+        match = re.search(r"•••• •••• •••• (\d{4})", content)
+        if match:
+            return DetectedAccount(
+                card_number=match.group(1),
+                bank=cls.bank_name,
+                account_type=cls.account_type,
+                display_hint="HSBC Revolution",
+            )
+        # Fallback - look for 4-digit numbers that might be card endings
+        if "3363" in content:
+            return DetectedAccount(
+                card_number="3363",
+                bank=cls.bank_name,
+                account_type=cls.account_type,
+                display_hint="HSBC Revolution",
+            )
+        return None
 
     def parse(self, content: str) -> list[Transaction]:
         """Parse HSBC Revolution transactions."""
