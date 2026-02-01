@@ -31,8 +31,8 @@ lunchsync-sg --setup ~/Downloads/bank-exports/
 
 The setup wizard will:
 1. Scan your bank export files to auto-detect accounts
-2. Prompt for your Lunch Money API key
-3. Fetch your Lunch Money assets
+2. Fetch your Lunch Money assets
+3. Prompt for your Lunch Money API key
 4. Let you map each bank account to a Lunch Money asset using an interactive picker (↑/↓ to navigate, Enter to select)
 5. Save configuration to `~/.config/lunchsync-sg/config.json`
 
