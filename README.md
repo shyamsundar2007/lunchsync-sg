@@ -18,27 +18,23 @@ Sync bank transactions from Singapore banks to [Lunch Money](https://lunchmoney.
 # Clone and install
 git clone https://github.com/shyamsundar2007/lunchsync-sg.git
 cd lunchsync-sg
-uv pip install -e .
+pip install -e .
 ```
 
 ### 2. Run Setup
 
-The first time you run the tool, it will automatically launch the setup wizard:
+Run setup with your bank export files to auto-detect accounts and map them to Lunch Money:
 
 ```bash
-lunchsync-sg
-```
-
-Or run setup explicitly:
-
-```bash
-lunchsync-sg --setup
+lunchsync-sg --setup ~/Downloads/bank-exports/
 ```
 
 The setup wizard will:
-1. Ask you to add your bank accounts/cards
-2. Optionally configure Lunch Money API integration
-3. Save configuration to `~/.config/lunchsync-sg/config.json`
+1. Scan your bank export files to auto-detect accounts
+2. Prompt for your Lunch Money API key
+3. Fetch your Lunch Money assets
+4. Let you map each bank account to a Lunch Money asset using an interactive picker (↑/↓ to navigate, Enter to select)
+5. Save configuration to `~/.config/lunchsync-sg/config.json`
 
 ### 3. Download Bank Exports
 
@@ -99,17 +95,17 @@ Configuration is stored in `~/.config/lunchsync-sg/config.json`:
 
 ### Managing Accounts
 
-Use the setup wizard to add, edit, or delete accounts:
+Re-run setup with your bank export files to detect and configure accounts:
 
 ```bash
-lunchsync-sg --setup
+lunchsync-sg --setup ~/Downloads/bank-exports/
 ```
 
-The wizard provides a menu:
-- **[1] Manage accounts** - Add, edit, or delete bank accounts
-- **[2] Configure Lunch Money** - Set API key and map accounts to assets
-- **[3] View configuration** - Display current settings
-- **[4] Save and exit** - Save changes and exit
+To view current configuration:
+
+```bash
+lunchsync-sg --show-config
+```
 
 ### Finding Account Identifiers
 
@@ -125,8 +121,8 @@ Open your bank export file and look for the account/card number. Examples:
 ## CLI Reference
 
 ```bash
-# Interactive setup wizard
-lunchsync-sg --setup
+# Interactive setup wizard (scans files and maps to Lunch Money)
+lunchsync-sg --setup ~/Downloads/bank-exports/
 
 # View current configuration
 lunchsync-sg --show-config
@@ -158,7 +154,7 @@ lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney -v
 ### "Unknown (1234)" account names
 
 Your account mapping is missing or incorrect. Check:
-1. Run `lunchsync-sg --setup` to add/verify accounts
+1. Run `lunchsync-sg --setup ~/Downloads/` to add/verify accounts
 2. Run `lunchsync-sg --show-config` to see current configuration
 3. Account identifier should match what's in your bank export
 4. Run with `-v` to see which identifiers are being detected
@@ -175,7 +171,7 @@ Run `lunchsync-sg --list-parsers` to see supported formats. If your bank isn't l
 
 ```bash
 # Install dev dependencies
-uv pip install -e ".[dev]"
+pip install -e ".[dev]"
 
 # Run tests
 pytest
