@@ -1,0 +1,15 @@
+"Account Details For:","DBS Savings Account 020-1-234567",,,,,,,
+"Statement as at:","01 Feb 2026",,,,,,,
+"",,,,,,,,
+"Available Balance:","SGD 5,000.00",,,,,,,
+"Ledger Balance:","SGD 5,000.00",,,,,,,
+"",,,,,,,,
+"Transaction Date","Transaction Code","Description","Transaction Ref1","Transaction Ref2","Transaction Ref3","Status","Debit Amount","Credit Amount"
+"31 Jan 2026","INT","  ","","","","Settled","",0.04
+"29 Jan 2026","SAL","EMPLOYER PTE LTD 1234567890123456 ","EMPLOYER PTE LTD","1234567890123456","","Settled","",241.8
+"27 Jan 2026","IBG","EDUCATION DEPT EDU-123 T1234567A","EDUCATION DEPT","EDU-123","T1234567A","Settled",640,""
+"19 Jan 2026","IBG","DBS CARD CENTRE DCC (CARDHOL 123456789012","DBS CARD CENTRE","DCC (CARDHOL","123456789012","Settled",1061.48,""
+"15 Jan 2026","HHL","0123456789  ","0123456789","","","Settled",129,""
+"11 Jan 2026","POS","NETS QR PAYMENT 123456789012345 TO: FOOD COURT ","NETS QR PAYMENT 123456789012345","TO: FOOD COURT","","Settled",1.8,""
+"10 Jan 2026","ICT","Other 20260110BANKSGSGREF123456 OTHR","Other","20260110BANKSGSGREF123456","OTHR","Settled","",1100
+"04 Jan 2026","ICT","Other 20260104BANKSGSGREF789012 OTHR","Other","20260104BANKSGSGREF789012","OTHR","Settled","",500

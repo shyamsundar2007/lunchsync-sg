@@ -1,0 +1,13 @@
+"Card Transaction Details For:","DBS MasterCard World 5420-1234-5678-0002",,,,,,
+"Transactions as at:","01 Feb 2026",,,,,,
+"",,,,,,,
+"Credit Limit:","SGD 100000",,,,,,
+"Available Limit:","SGD 99000.00",,,,,,
+"",,,,,,,
+"Transaction Date","Transaction Posting Date","Transaction Description","Transaction Type","Payment Type","Transaction Status","Debit Amount","Credit Amount"
+"19 Jan 2026","19 Jan 2026","AUTOPAY AC#1234567890123456","PAYMENT","Others","Settled","","1061.48"
+"19 Jan 2026","19 Jan 2026","ISP PROVIDER LIMITED SINGAPORE SGP","PURCHASE","Online/In-App Payment","Settled","15.9",""
+"14 Jan 2026","14 Jan 2026","INTERNET SERVICE PTE LTD INTERNET SGP","PURCHASE","Online/In-App Payment","Settled","51.56",""
+"02 Jan 2026","02 Jan 2026","TRAVEL BOOKING * ABC12345 LONDON GBR","PURCHASE","Online/In-App Payment","Settled","830.45",""
+"23 Dec 2025","24 Dec 2025","RIDESHARE* A-EFGH5678WXY SINGAPORE SGP","PURCHASE","Online/In-App Payment","Settled","16.7",""
+"23 Dec 2025","24 Dec 2025","RIDESHARE* A-IJKL9012ZAB SINGAPORE SGP","PURCHASE","Online/In-App Payment","Settled","36.4",""
