@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from lunchsync_sg.models import Transaction
-from lunchsync_sg.parsers.base import BankParser, ParserRegistry
+from lunchsync_sg.parsers.base import BankParser, DetectedAccount, ParserRegistry
 from lunchsync_sg.utils import clean_description, parse_amount, parse_date
 
 
@@ -16,6 +16,7 @@ class UOBCreditParser(BankParser):
     """Parser for UOB Credit Card exports (XLS format converted to CSV)."""
 
     bank_name: ClassVar[str] = "UOB"
+    account_type: ClassVar[str] = "credit_card"
     file_patterns: ClassVar[list[str]] = ["United Overseas Bank", "LADY'S SOLITAIRE", "PREFERRED PLATINUM"]
 
     @classmethod
@@ -26,6 +27,38 @@ class UOBCreditParser(BankParser):
             "UNITED OVERSEAS BANK" in content_upper
             and ("LADY'S SOLITAIRE" in content_upper or "PREFERRED PLATINUM" in content_upper)
             and "TRANSACTION DATE" in content_upper
+        )
+
+    @classmethod
+    def detect_account(cls, content: str) -> DetectedAccount | None:
+        """Detect UOB credit card account from content."""
+        content_upper = content.upper()
+
+        # Determine card type for display hint
+        if "LADY'S SOLITAIRE" in content_upper:
+            display_hint = "UOB Lady's Solitaire"
+        elif "PREFERRED PLATINUM" in content_upper:
+            display_hint = "UOB Platinum VISA"
+        else:
+            display_hint = "UOB Credit Card"
+
+        # Try to find account number
+        for line in content.split("\n")[:15]:
+            match = re.search(r"Account Number:,(\d+)", line)
+            if match:
+                return DetectedAccount(
+                    card_number=match.group(1),
+                    bank=cls.bank_name,
+                    account_type=cls.account_type,
+                    display_hint=display_hint,
+                )
+
+        # Return with empty card number if not found
+        return DetectedAccount(
+            card_number="",
+            bank=cls.bank_name,
+            account_type=cls.account_type,
+            display_hint=display_hint,
         )
 
     def parse(self, content: str) -> list[Transaction]:

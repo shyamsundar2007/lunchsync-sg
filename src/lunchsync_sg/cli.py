@@ -24,10 +24,11 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  lunchsync-sg --setup ~/Downloads/bank-exports/
   lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
-  lunchsync-sg file1.csv file2.xls file3.csv -o output.csv
+  lunchsync-sg ~/Downloads/ --upload-lunchmoney
+  lunchsync-sg ~/Downloads/ --upload-lunchmoney --dry-run
   lunchsync-sg --list-parsers
-  lunchsync-sg --setup
 
 Supported banks:
   - OCBC (Credit Card, 360 Account)
@@ -126,8 +127,8 @@ Supported banks:
     if args.setup:
         from lunchsync_sg.setup import run_setup
 
-        existing_config = load_config(args.config)
-        run_setup(existing_config)
+        input_paths = [Path(p) for p in args.inputs] if args.inputs else None
+        run_setup(input_paths=input_paths, api_key=args.lm_api_key)
         return 0
 
     # Load configuration
@@ -173,18 +174,10 @@ Supported banks:
     # Check if first run (no config and no inputs)
     if not config_exists() and not args.inputs:
         print("Welcome to lunchsync-sg!")
-        print("\nNo configuration found. Let's set up your accounts.")
-        print("(You can skip this with Ctrl+C and configure manually later)")
-        print()
-
-        try:
-            from lunchsync_sg.setup import run_setup
-
-            run_setup()
-            return 0
-        except KeyboardInterrupt:
-            print("\n\nSetup cancelled. Run 'lunchsync-sg --setup' when ready.")
-            return 0
+        print("\nNo configuration found. To set up, run:")
+        print("  lunchsync-sg --setup ~/Downloads/bank-exports/")
+        print("\nThis will scan your bank export files and guide you through setup.")
+        return 0
 
     # Check for input files
     if not args.inputs:

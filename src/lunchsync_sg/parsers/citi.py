@@ -1,12 +1,13 @@
 """Citibank parsers."""
 
 import csv
+import re
 from io import StringIO
 from pathlib import Path
 from typing import ClassVar
 
 from lunchsync_sg.models import Transaction
-from lunchsync_sg.parsers.base import BankParser, ParserRegistry
+from lunchsync_sg.parsers.base import BankParser, DetectedAccount, ParserRegistry
 from lunchsync_sg.utils import clean_description, parse_amount, parse_date
 
 
@@ -15,6 +16,7 @@ class CitiParser(BankParser):
     """Parser for Citibank Credit Card CSV exports."""
 
     bank_name: ClassVar[str] = "Citi"
+    account_type: ClassVar[str] = "credit_card"
     file_patterns: ClassVar[list[str]] = ["5425123456780005", "5425987654321098"]
 
     # Card number to name mapping
@@ -28,6 +30,22 @@ class CitiParser(BankParser):
         """Check if content is Citibank format."""
         # Citi has no header, just data rows with card number at the end
         return "'5425123456780005'" in content or "'5425987654321098'" in content
+
+    @classmethod
+    def detect_account(cls, content: str) -> DetectedAccount | None:
+        """Detect Citibank account from content."""
+        # Look for card numbers in the content
+        match = re.search(r"'(\d{16})'", content)
+        if match:
+            card_number = match.group(1)
+            display_hint = cls.CARD_NAMES.get(card_number, "Citi Credit Card")
+            return DetectedAccount(
+                card_number=card_number,
+                bank=cls.bank_name,
+                account_type=cls.account_type,
+                display_hint=display_hint,
+            )
+        return None
 
     def parse(self, content: str) -> list[Transaction]:
         """Parse Citibank transactions."""

@@ -1,10 +1,21 @@
 """Base parser class and registry for bank parsers."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
 from lunchsync_sg.models import Transaction
+
+
+@dataclass
+class DetectedAccount:
+    """Account information detected from a bank export file."""
+
+    card_number: str
+    bank: str
+    account_type: str  # credit_card or savings
+    display_hint: str  # e.g., "OCBC Credit Card" for display
 
 
 class BankParser(ABC):
@@ -12,6 +23,7 @@ class BankParser(ABC):
 
     # Class attributes to be overridden by subclasses
     bank_name: ClassVar[str] = "Unknown"
+    account_type: ClassVar[str] = "credit_card"  # credit_card or savings
     file_patterns: ClassVar[list[str]] = []  # Patterns to match in file content
 
     def __init__(
@@ -50,6 +62,22 @@ class BankParser(ABC):
             List of Transaction objects
         """
         pass
+
+    @classmethod
+    def detect_account(cls, content: str) -> DetectedAccount | None:
+        """
+        Detect account information from file content without full parsing.
+
+        Override this in subclasses to extract the account identifier.
+        Default implementation returns None.
+
+        Args:
+            content: File content as string
+
+        Returns:
+            DetectedAccount with card_number, bank, type, or None if not detected
+        """
+        return None
 
     def get_account_name(self, identifier: str) -> str:
         """Get account name, using override if set."""
