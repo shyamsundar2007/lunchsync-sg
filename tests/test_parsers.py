@@ -78,7 +78,7 @@ class TestOCBC360Parser:
 
         # Check for expected transactions
         descriptions = [tx.description for tx in transactions]
-        assert any("Swimming lessons" in d for d in descriptions)
+        assert any("OTHR-Swimming" in d and "lessons" in d for d in descriptions)
         assert any("EMPLOYER" in d or "SALARY" in d for d in descriptions)
 
     def test_multiline_descriptions(self, ocbc_360_file: Path) -> None:
