@@ -164,7 +164,7 @@ class OCBC360Parser(BankParser):
             if not date_val:
                 continue
 
-            desc = clean_description(row[2])
+            desc = " ".join(sorted(clean_description(row[2]).split()))
             withdrawal = parse_amount(row[3])
             deposit = parse_amount(row[4])
 
