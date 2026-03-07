@@ -3,6 +3,7 @@
 
 import argparse
 import sys
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +71,12 @@ Supported banks:
         "--no-sort",
         action="store_true",
         help="Don't sort by date",
+    )
+    parser.add_argument(
+        "--since",
+        type=str,
+        metavar="DATE",
+        help="Only include transactions on or after this date (YYYY-MM-DD or DD/MM/YYYY)",
     )
     parser.add_argument(
         "--config",
@@ -210,6 +217,20 @@ Supported banks:
 
     transactions = normalizer.process_files(files)
 
+    # Apply date filter
+    if args.since:
+        since_date = _parse_since_date(args.since)
+        if since_date is None:
+            print(f"Error: Invalid date format '{args.since}'. Use YYYY-MM-DD or DD/MM/YYYY",
+                  file=sys.stderr)
+            return 1
+        before_count = len(transactions)
+        transactions = [tx for tx in transactions if tx.date >= since_date]
+        filtered = before_count - len(transactions)
+        if filtered > 0:
+            print(f"Filtered out {filtered} transactions before {since_date.isoformat()}",
+                  file=sys.stderr)
+
     # Report results
     if args.verbose:
         for filepath, error in normalizer.errors:
@@ -327,6 +348,16 @@ Supported banks:
     print(f"Wrote {len(transactions)} transactions to {output_path}", file=sys.stderr)
 
     return 0
+
+
+def _parse_since_date(date_str: str) -> date | None:
+    """Parse a date string in YYYY-MM-DD or DD/MM/YYYY format."""
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 if __name__ == "__main__":

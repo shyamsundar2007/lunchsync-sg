@@ -136,10 +136,12 @@ class BankNormalizer:
         unique: list[Transaction] = []
 
         for tx in transactions:
-            # Key on date, description (first 30 chars), amount, account
+            # Sort description tokens so field reordering (e.g. OCBC 360)
+            # doesn't produce different keys for the same transaction
+            sorted_desc = " ".join(sorted(tx.description.split()))
             key = (
                 tx.date,
-                tx.description[:30],
+                sorted_desc[:30],
                 str(tx.amount),
                 tx.account,
             )
