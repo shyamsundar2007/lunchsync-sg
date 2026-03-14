@@ -17,7 +17,7 @@ class UOBCreditParser(BankParser):
 
     bank_name: ClassVar[str] = "UOB"
     account_type: ClassVar[str] = "credit_card"
-    file_patterns: ClassVar[list[str]] = ["United Overseas Bank", "LADY'S SOLITAIRE", "PREFERRED PLATINUM"]
+    file_patterns: ClassVar[list[str]] = ["United Overseas Bank"]
 
     @classmethod
     def can_parse(cls, content: str, filepath: Path | None = None) -> bool:
@@ -25,22 +25,24 @@ class UOBCreditParser(BankParser):
         content_upper = content.upper()
         return (
             "UNITED OVERSEAS BANK" in content_upper
-            and ("LADY'S SOLITAIRE" in content_upper or "PREFERRED PLATINUM" in content_upper)
             and "TRANSACTION DATE" in content_upper
+            and "POSTING DATE" in content_upper
         )
+
+    @classmethod
+    def _extract_card_type(cls, content: str) -> str:
+        """Extract card type from Account Type field in header."""
+        for line in content.split("\n")[:15]:
+            match = re.search(r"Account Type:,(.+?)(?:,|$)", line)
+            if match:
+                return match.group(1).strip()
+        return ""
 
     @classmethod
     def detect_account(cls, content: str) -> DetectedAccount | None:
         """Detect UOB credit card account from content."""
-        content_upper = content.upper()
-
-        # Determine card type for display hint
-        if "LADY'S SOLITAIRE" in content_upper:
-            display_hint = "UOB Lady's Solitaire"
-        elif "PREFERRED PLATINUM" in content_upper:
-            display_hint = "UOB Platinum VISA"
-        else:
-            display_hint = "UOB Credit Card"
+        card_type = cls._extract_card_type(content)
+        display_hint = f"UOB {card_type}" if card_type else "UOB Credit Card"
 
         # Try to find account number
         for line in content.split("\n")[:15]:
@@ -53,7 +55,6 @@ class UOBCreditParser(BankParser):
                     display_hint=display_hint,
                 )
 
-        # Return with empty card number if not found
         return DetectedAccount(
             card_number="",
             bank=cls.bank_name,
@@ -66,16 +67,11 @@ class UOBCreditParser(BankParser):
         transactions: list[Transaction] = []
         self.pending_skipped = 0  # Track skipped pending transactions
 
-        # Detect card type and get account name
-        content_upper = content.upper()
-        if "LADY'S SOLITAIRE" in content_upper:
-            account_name = "UOB Lady's Solitaire"
-        elif "PREFERRED PLATINUM" in content_upper:
-            account_name = "UOB Platinum VISA"
-        else:
-            account_name = "UOB Card"
+        # Derive account name from card type or account number
+        card_type = self._extract_card_type(content)
+        account_name = f"UOB {card_type}" if card_type else "UOB Card"
 
-        # Try to get account name from account number in header
+        # Try to get mapped account name from account number in header
         for line in content.split("\n")[:15]:
             match = re.search(r"Account Number:,(\d+)", line)
             if match:
