@@ -18,7 +18,7 @@ Sync bank transactions from Singapore banks to [Lunch Money](https://lunchmoney.
 # Clone and install
 git clone https://github.com/shyamsundar2007/lunchsync-sg.git
 cd lunchsync-sg
-pip install -e .
+uv sync
 ```
 
 ### 2. Download Bank Exports
@@ -40,7 +40,7 @@ Put all downloaded files in a folder (e.g., `~/Downloads/bank-exports/`).
 Run setup with your bank export files to auto-detect accounts and map them to Lunch Money:
 
 ```bash
-lunchsync-sg --setup ~/Downloads/bank-exports/
+uv run lunchsync-sg --setup ~/Downloads/bank-exports/
 ```
 
 The setup wizard will:
@@ -54,13 +54,13 @@ The setup wizard will:
 
 ```bash
 # Upload all bank exports to Lunch Money
-lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney
+uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney
 
 # Preview what would be uploaded (dry run)
-lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run
+uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run
 
 # Export to CSV instead
-lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
+uv run lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
 ```
 
 ## Configuration
@@ -98,13 +98,13 @@ Configuration is stored in `~/.config/lunchsync-sg/config.json`:
 Re-run setup with your bank export files to detect and configure accounts:
 
 ```bash
-lunchsync-sg --setup ~/Downloads/bank-exports/
+uv run lunchsync-sg --setup ~/Downloads/bank-exports/
 ```
 
 To view current configuration:
 
 ```bash
-lunchsync-sg --show-config
+uv run lunchsync-sg --show-config
 ```
 
 ### Finding Account Identifiers
@@ -122,31 +122,31 @@ Open your bank export file and look for the account/card number. Examples:
 
 ```bash
 # Interactive setup wizard (scans files and maps to Lunch Money)
-lunchsync-sg --setup ~/Downloads/bank-exports/
+uv run lunchsync-sg --setup ~/Downloads/bank-exports/
 
 # View current configuration
-lunchsync-sg --show-config
+uv run lunchsync-sg --show-config
 
 # Upload to Lunch Money
-lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney
+uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney
 
 # Dry run (preview without uploading)
-lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run
+uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run
 
 # Export to CSV instead (for manual import)
-lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
+uv run lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
 
 # Export with all fields (currency, category, reference)
-lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv --full
+uv run lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv --full
 
 # Lunch Money asset mapping (after accounts are configured)
-lunchsync-sg --lm-setup --lm-api-key YOUR_KEY
+uv run lunchsync-sg --lm-setup --lm-api-key YOUR_KEY
 
 # List available bank parsers
-lunchsync-sg --list-parsers
+uv run lunchsync-sg --list-parsers
 
 # Verbose output
-lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney -v
+uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney -v
 ```
 
 ## Troubleshooting
@@ -154,8 +154,8 @@ lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney -v
 ### "Unknown (1234)" account names
 
 Your account mapping is missing or incorrect. Check:
-1. Run `lunchsync-sg --setup ~/Downloads/` to add/verify accounts
-2. Run `lunchsync-sg --show-config` to see current configuration
+1. Run `uv run lunchsync-sg --setup ~/Downloads/` to add/verify accounts
+2. Run `uv run lunchsync-sg --show-config` to see current configuration
 3. Account identifier should match what's in your bank export
 4. Run with `-v` to see which identifiers are being detected
 
@@ -165,22 +165,22 @@ The tool automatically deduplicates within a batch. Lunch Money also deduplicate
 
 ### Unsupported bank format
 
-Run `lunchsync-sg --list-parsers` to see supported formats. If your bank isn't listed, the tool uses content detection - it may still work if the format is similar.
+Run `uv run lunchsync-sg --list-parsers` to see supported formats. If your bank isn't listed, the tool uses content detection - it may still work if the format is similar.
 
 ## Development
 
 ```bash
-# Install dev dependencies
-pip install -e ".[dev]"
+# Install with dev dependencies
+uv sync --extra dev
 
 # Run tests
-pytest
+uv run pytest
 
 # Type check
-mypy src
+uv run mypy src
 
 # Lint
-ruff check src tests
+uv run ruff check src tests
 ```
 
 ## Disclaimer

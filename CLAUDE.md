@@ -10,20 +10,20 @@ LunchSync SG is a Python CLI tool that normalizes bank transaction exports from 
 
 ```bash
 # Install with dev dependencies
-uv pip install -e ".[dev]"
+uv sync --extra dev
 
 # Run tests
-pytest                                  # All tests
-pytest tests/test_parsers.py -k "ocbc"  # Single test/pattern
-pytest --cov=lunchsync_sg               # With coverage
+uv run pytest                                  # All tests
+uv run pytest tests/test_parsers.py -k "ocbc"  # Single test/pattern
+uv run pytest --cov=lunchsync_sg               # With coverage
 
 # Code quality
-ruff check src tests                    # Linting
-mypy src                                # Type checking (strict mode)
+uv run ruff check src tests                    # Linting
+uv run mypy src                                # Type checking (strict mode)
 
 # CLI usage
-lunchsync-sg ~/Downloads/ -o output.csv
-lunchsync-sg --list-parsers
+uv run lunchsync-sg ~/Downloads/ -o output.csv
+uv run lunchsync-sg --list-parsers
 ```
 
 ## Architecture
