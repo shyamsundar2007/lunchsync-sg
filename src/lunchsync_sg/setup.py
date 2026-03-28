@@ -208,13 +208,45 @@ def run_setup(
     if config is None:
         config = create_default_config()
 
+    # Check if config already has accounts and prompt for mode
+    append_mode = False
+    existing_accounts: list[dict[str, str]] = config.get("accounts", [])
+    if existing_accounts:
+        print(f"\nFound {len(existing_accounts)} existing account(s):")
+        for existing in existing_accounts:
+            masked = mask_card_number(existing.get("card_number", ""))
+            print(f"  - {existing['name']} ({existing['bank']}, {masked})")
+
+        mode_idx = interactive_picker(
+            ["Add new accounts (keep existing)", "Reset and start fresh"],
+            prompt="\nWhat would you like to do?",
+            allow_skip=False,
+        )
+        append_mode = mode_idx == 0
+
     # Step 1: Detect accounts from files
     if input_paths:
         print("\nScanning bank export files...")
         detected_accounts = scan_files_for_accounts(input_paths)
 
         if detected_accounts:
-            print(f"Found {len(detected_accounts)} account(s):\n")
+            # In append mode, filter out accounts already in config
+            if append_mode:
+                existing_card_nums: set[str] = {
+                    e.get("card_number", "").replace("-", "").replace(" ", "")
+                    for e in existing_accounts
+                }
+                detected_accounts = [
+                    a
+                    for a in detected_accounts
+                    if a.card_number.replace("-", "").replace(" ", "")
+                    not in existing_card_nums
+                ]
+                if not detected_accounts:
+                    print("\nAll detected accounts are already configured.")
+                    return config
+
+            print(f"Found {len(detected_accounts)} new account(s):\n")
             for acc in detected_accounts:
                 masked = mask_card_number(acc.card_number) if acc.card_number else "(no number)"
                 print(f"  {acc.display_hint}: {masked}")
@@ -274,6 +306,7 @@ def run_setup(
         print("\nFor each bank account, select the Lunch Money asset it maps to.")
         print("The asset name will be used as the account name.\n")
 
+        assets = sorted(assets, key=lambda a: a["name"])
         asset_names = [asset["name"] for asset in assets]
         accounts_config: list[dict[str, str]] = []
         account_mapping: dict[str, int] = {}
@@ -303,8 +336,14 @@ def run_setup(
             print()  # Add spacing between accounts
 
         # Update config
-        config["accounts"] = accounts_config
-        config["lunch_money"]["account_mapping"] = account_mapping
+        if append_mode:
+            config.setdefault("accounts", []).extend(accounts_config)
+            config["lunch_money"].setdefault("account_mapping", {}).update(
+                account_mapping
+            )
+        else:
+            config["accounts"] = accounts_config
+            config["lunch_money"]["account_mapping"] = account_mapping
 
     # Save config
     config_path = get_config_path()
