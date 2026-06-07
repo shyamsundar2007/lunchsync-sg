@@ -9,6 +9,7 @@ Sync bank transactions from Singapore banks to [Lunch Money](https://lunchmoney.
 - **UOB**: Lady's Solitaire, Preferred Platinum VISA
 - **HSBC**: Revolution Card
 - **Citibank**: Rewards, Prestige
+- **AMEX**: KrisFlyer Ascend
 
 ## Quick Start
 
@@ -32,6 +33,7 @@ Download transaction exports from your bank's website:
 | UOB | Personal Internet Banking → Cards → Download Statement (XLS) |
 | HSBC | Online Banking → Credit Cards → Download Transactions |
 | Citi | Citibank Online → Cards → Download Transaction History |
+| AMEX | amex.com.sg → Statements & Activity → Download (CSV) |
 
 Put all downloaded files in a folder (e.g., `~/Downloads/bank-exports/`).
 
@@ -117,6 +119,7 @@ Open your bank export file and look for the account/card number. Examples:
 - UOB: Full card number in the XLS file
 - HSBC: Last 4 digits (e.g., `3363`)
 - Citi: Full card number
+- AMEX: Use `AMEX` (exports contain no card number)
 
 ## CLI Reference
 
@@ -187,7 +190,7 @@ uv run ruff check src tests
 
 This software is provided "as is" without warranty of any kind. By using this tool, you acknowledge that:
 
-- **Not affiliated**: This project is not affiliated with, endorsed by, or connected to any bank (OCBC, DBS, UOB, HSBC, Citibank) or Lunch Money. All trademarks belong to their respective owners.
+- **Not affiliated**: This project is not affiliated with, endorsed by, or connected to any bank (OCBC, DBS, UOB, HSBC, Citibank, American Express) or Lunch Money. All trademarks belong to their respective owners.
 - **Your responsibility**: You are solely responsible for your financial data. Always verify transactions before relying on the output.
 - **No guarantee**: Bank export formats may change at any time, which could cause parsing errors. Always review the output.
 - **API keys**: Keep your Lunch Money API key secure. The tool stores it locally in your config file.

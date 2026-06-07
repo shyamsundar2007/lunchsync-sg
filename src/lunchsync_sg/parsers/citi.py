@@ -55,10 +55,7 @@ class CitiParser(BankParser):
             return False
 
         # Check card number with apostrophe in last column
-        if not cls.CARD_PATTERN.search(row[4]):
-            return False
-
-        return True
+        return cls.CARD_PATTERN.search(row[4]) is not None
 
     @classmethod
     def detect_account(cls, content: str) -> DetectedAccount | None:

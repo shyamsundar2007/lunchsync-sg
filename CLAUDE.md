@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-LunchSync SG is a Python CLI tool that normalizes bank transaction exports from multiple Singapore banks (OCBC, DBS, UOB, HSBC, Citibank) into a unified CSV format. It uses a plugin-based parser architecture with auto-detection of bank formats.
+LunchSync SG is a Python CLI tool that normalizes bank transaction exports from multiple Singapore banks (OCBC, DBS, UOB, HSBC, Citibank, AMEX) into a unified CSV format. It uses a plugin-based parser architecture with auto-detection of bank formats.
 
 ## Commands
 
@@ -47,7 +47,7 @@ The `ParserRegistry` auto-detects the appropriate parser for each file based on 
 ### Core Components
 
 - `src/lunchsync_sg/parsers/base.py` - `BankParser` ABC and `ParserRegistry`
-- `src/lunchsync_sg/parsers/*.py` - Bank-specific parsers (ocbc, dbs, uob, hsbc, citi)
+- `src/lunchsync_sg/parsers/*.py` - Bank-specific parsers (ocbc, dbs, uob, hsbc, citi, amex)
 - `src/lunchsync_sg/models.py` - `Transaction` (frozen dataclass) and `AccountMapping`
 - `src/lunchsync_sg/normalizer.py` - `BankNormalizer` orchestrator
 - `src/lunchsync_sg/utils/parsing.py` - `parse_date`, `parse_amount`, `clean_description` helpers

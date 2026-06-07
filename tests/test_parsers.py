@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from lunchsync_sg.parsers import (
+    AmexParser,
     CitiParser,
     DBSCreditParser,
     DBSSavingsParser,
@@ -222,6 +223,44 @@ class TestCitiParser:
         assert any("Citi Prestige" in tx.account for tx in transactions)
 
 
+class TestAmexParser:
+    """Tests for AMEX parser."""
+
+    def test_can_parse(self, amex_file: Path) -> None:
+        """Test format detection."""
+        content = read_file(amex_file)
+        assert AmexParser.can_parse(content) is True
+
+    def test_detect_account(self, amex_file: Path) -> None:
+        """Test account detection."""
+        content = read_file(amex_file)
+        account = AmexParser.detect_account(content)
+        assert account is not None
+        assert account.card_number == "AMEX"
+        assert account.bank == "AMEX"
+
+    def test_parse_transactions(self, amex_file: Path, test_config: dict[str, Any]) -> None:
+        """Test parsing transactions."""
+        content = read_file(amex_file)
+        parser = AmexParser(config=test_config)
+        transactions = parser.parse(content)
+
+        assert len(transactions) == 3
+        assert all(tx.account == "AMEX KrisFlyer Ascend Test" for tx in transactions)
+
+        # Charge: positive in export -> negative (expense), MM/DD/YYYY date
+        tx = transactions[0]
+        assert tx.date == date(2026, 6, 3)
+        assert "BUS/MRT" in tx.description
+        assert tx.amount == Decimal("-3.08")
+        assert tx.reference == "AT261570003000010090001"
+
+        # Payment: negative in export -> positive (income)
+        payment = transactions[2]
+        assert payment.date == date(2026, 5, 28)
+        assert payment.amount == Decimal("1500.00")
+
+
 class TestParserRegistry:
     """Tests for ParserRegistry."""
 
@@ -236,6 +275,12 @@ class TestParserRegistry:
         content = read_file(dbs_savings_file)
         parser = ParserRegistry.get_parser(content)
         assert isinstance(parser, DBSSavingsParser)
+
+    def test_get_parser_amex(self, amex_file: Path) -> None:
+        """Test getting parser for AMEX."""
+        content = read_file(amex_file)
+        parser = ParserRegistry.get_parser(content)
+        assert isinstance(parser, AmexParser)
 
     def test_get_parser_unknown(self) -> None:
         """Test getting parser for unknown format."""
