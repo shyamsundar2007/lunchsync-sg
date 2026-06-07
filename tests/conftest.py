@@ -19,6 +19,7 @@ TEST_CONFIG: dict[str, Any] = {
         {"card_number": "3363", "name": "HSBC Revolution Test", "bank": "HSBC", "type": "credit_card"},
         {"card_number": "5425123456780005", "name": "Citi Rewards Test", "bank": "Citi", "type": "credit_card"},
         {"card_number": "5425987654321098", "name": "Citi Prestige Test", "bank": "Citi", "type": "credit_card"},
+        {"card_number": "AMEX", "name": "AMEX KrisFlyer Ascend Test", "bank": "AMEX", "type": "credit_card"},
     ],
     "lunch_money": {
         "api_key": None,
@@ -97,3 +98,9 @@ def citi_rewards_file(fixtures_dir: Path) -> Path:
 def citi_prestige_file(fixtures_dir: Path) -> Path:
     """Return path to Citi Prestige fixture."""
     return fixtures_dir / "citi_prestige.csv"
+
+
+@pytest.fixture
+def amex_file(fixtures_dir: Path) -> Path:
+    """Return path to AMEX KrisFlyer Ascend fixture."""
+    return fixtures_dir / "amex_krisflyer.csv"
