@@ -165,6 +165,44 @@ def get_lunchmoney_account_mapping(
     return {k: int(v) for k, v in account_map.items()}
 
 
+def get_jev_enabled(config: dict[str, Any] | None = None) -> bool:
+    """Return whether post-upload JEV categorization is enabled."""
+    if not config:
+        return False
+    return bool(config.get("jev", {}).get("enabled", False))
+
+
+def get_jev_api_key(
+    config: dict[str, Any] | None = None,
+    override: str | None = None,
+) -> str | None:
+    """Get a JEV API key from an override, environment, or config."""
+    if override:
+        return override
+
+    if api_key := os.getenv("JEV_API_KEY"):
+        return api_key
+
+    if config and (api_key := config.get("jev", {}).get("api_key")):
+        return api_key  # type: ignore[no-any-return]
+
+    return None
+
+
+def get_jev_secret_reference(config: dict[str, Any] | None = None) -> str | None:
+    """Get an optional 1Password secret reference for the JEV API key."""
+    if not config:
+        return None
+    return config.get("jev", {}).get("secret_reference")  # type: ignore[no-any-return]
+
+
+def get_op_keychain_service(config: dict[str, Any] | None = None) -> str | None:
+    """Get an optional macOS Keychain service containing a 1Password token."""
+    if not config:
+        return None
+    return config.get("jev", {}).get("op_service_account_keychain_service")  # type: ignore[no-any-return]
+
+
 def get_account_name(
     identifier: str,
     mappings: list[AccountMapping] | None = None,
@@ -201,5 +239,10 @@ def create_default_config() -> dict[str, Any]:
         "lunch_money": {
             "api_key": None,
             "account_mapping": {},
+        },
+        "jev": {
+            "enabled": False,
+            "secret_reference": None,
+            "op_service_account_keychain_service": None,
         },
     }
