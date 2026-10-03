@@ -1,7 +1,7 @@
 """Lunch Money API client for uploading transactions."""
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
@@ -16,6 +16,7 @@ class UploadResult:
     uploaded: int
     skipped: int
     errors: list[str]
+    created_ids: list[int] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -60,10 +61,12 @@ class LunchMoneyClient:
         """Initialize client with API key."""
         self.api_key = api_key
         self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        })
+        self._session.headers.update(
+            {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+        )
 
     def _request(
         self,
@@ -81,6 +84,26 @@ class LunchMoneyClient:
         """Get all assets (accounts) from Lunch Money."""
         result = self._request("GET", "assets")
         return result.get("assets", [])  # type: ignore[no-any-return]
+
+    def get_categories(self) -> list[dict[str, Any]]:
+        """Get all Lunch Money categories in flattened form."""
+        result = self._request("GET", "categories?format=flattened")
+        return result.get("categories", [])  # type: ignore[no-any-return]
+
+    def get_transaction(self, transaction_id: int) -> dict[str, Any]:
+        """Get a transaction with expenses represented as negative amounts."""
+        return self._request(
+            "GET",
+            f"transactions/{transaction_id}?debit_as_negative=true",
+        )
+
+    def update_transaction_category(self, transaction_id: int, category_id: int) -> None:
+        """Assign a category without changing the transaction's review status."""
+        self._request(
+            "PUT",
+            f"transactions/{transaction_id}",
+            json={"category_id": category_id},
+        )
 
     def upload_transactions(
         self,
@@ -101,6 +124,7 @@ class LunchMoneyClient:
         uploaded = 0
         skipped = 0
         errors: list[str] = []
+        created_ids: list[int] = []
 
         # Filter transactions to those with mapped accounts
         payloads: list[dict[str, Any]] = []
@@ -123,12 +147,14 @@ class LunchMoneyClient:
                         "transactions": batch,
                         "debit_as_negative": True,
                         "skip_duplicates": skip_duplicates,
+                        "apply_rules": True,
                     },
                 )
 
                 # Parse result - API returns list of IDs for created transactions
                 ids = result.get("ids", [])
                 uploaded += len(ids)
+                created_ids.extend(int(transaction_id) for transaction_id in ids)
 
                 # Calculate skipped from this batch (duplicates)
                 batch_skipped = len(batch) - len(ids)
@@ -139,7 +165,12 @@ class LunchMoneyClient:
             except requests.RequestException as e:
                 errors.append(f"Batch {i // self.MAX_BATCH_SIZE + 1}: {e}")
 
-        return UploadResult(uploaded=uploaded, skipped=skipped, errors=errors)
+        return UploadResult(
+            uploaded=uploaded,
+            skipped=skipped,
+            errors=errors,
+            created_ids=created_ids,
+        )
 
 
 def get_known_accounts(config: dict[str, Any] | None = None) -> list[str]:

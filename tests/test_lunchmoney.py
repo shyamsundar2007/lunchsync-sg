@@ -191,6 +191,26 @@ class TestLunchMoneyClient:
         assert result.uploaded == 3
         assert result.skipped == 0
         assert result.errors == []
+        assert result.created_ids == [1, 2, 3]
+
+        request_json = mock_session.request.call_args.kwargs["json"]
+        assert request_json["apply_rules"] is True
+
+    @patch("lunchsync_sg.lunchmoney.requests.Session")
+    def test_update_category_does_not_clear_transaction(
+        self, mock_session_class: MagicMock
+    ) -> None:
+        """Test category updates do not alter review status."""
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        mock_session.request.return_value.json.return_value = {"updated": True}
+
+        client = LunchMoneyClient("test_key")
+        client.update_transaction_category(123, 456)
+
+        request = mock_session.request.call_args
+        assert request.args[:2] == ("PUT", "https://dev.lunchmoney.app/v1/transactions/123")
+        assert request.kwargs["json"] == {"category_id": 456}
 
     @patch("lunchsync_sg.lunchmoney.requests.Session")
     def test_upload_skips_unmapped_accounts(self, mock_session_class: MagicMock) -> None:

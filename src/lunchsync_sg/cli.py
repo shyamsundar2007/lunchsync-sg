@@ -9,8 +9,12 @@ from typing import Any
 
 from lunchsync_sg.config import (
     config_exists,
+    get_jev_api_key,
+    get_jev_enabled,
+    get_jev_secret_reference,
     get_lunchmoney_account_mapping,
     get_lunchmoney_api_key,
+    get_op_keychain_service,
     load_config,
 )
 from lunchsync_sg.models import Transaction
@@ -127,6 +131,15 @@ Supported banks:
         action="store_true",
         help="Show what would be uploaded without actually uploading",
     )
+    parser.add_argument(
+        "--categorize-with-jev",
+        action="store_true",
+        help="Categorize transactions left unmatched by Lunch Money rules using JEV",
+    )
+    parser.add_argument(
+        "--jev-api-key",
+        help="JEV API key (or use JEV_API_KEY/configured 1Password reference)",
+    )
 
     args = parser.parse_args()
 
@@ -167,8 +180,10 @@ Supported banks:
 
         api_key = get_lunchmoney_api_key(config, args.lm_api_key)
         if not api_key:
-            print("Error: API key required. Use --lm-api-key or configure in config.json",
-                  file=sys.stderr)
+            print(
+                "Error: API key required. Use --lm-api-key or configure in config.json",
+                file=sys.stderr,
+            )
             return 1
 
         try:
@@ -221,15 +236,19 @@ Supported banks:
     if args.since:
         since_date = _parse_since_date(args.since)
         if since_date is None:
-            print(f"Error: Invalid date format '{args.since}'. Use YYYY-MM-DD or DD/MM/YYYY",
-                  file=sys.stderr)
+            print(
+                f"Error: Invalid date format '{args.since}'. Use YYYY-MM-DD or DD/MM/YYYY",
+                file=sys.stderr,
+            )
             return 1
         before_count = len(transactions)
         transactions = [tx for tx in transactions if tx.date >= since_date]
         filtered = before_count - len(transactions)
         if filtered > 0:
-            print(f"Filtered out {filtered} transactions before {since_date.isoformat()}",
-                  file=sys.stderr)
+            print(
+                f"Filtered out {filtered} transactions before {since_date.isoformat()}",
+                file=sys.stderr,
+            )
 
     # Report results
     if args.verbose:
@@ -250,15 +269,19 @@ Supported banks:
 
         api_key = get_lunchmoney_api_key(config, args.lm_api_key)
         if not api_key:
-            print("Error: API key required. Use --lm-api-key or configure in config.json",
-                  file=sys.stderr)
+            print(
+                "Error: API key required. Use --lm-api-key or configure in config.json",
+                file=sys.stderr,
+            )
             return 1
 
         account_mapping = get_lunchmoney_account_mapping(config)
         if not account_mapping:
             print("Error: No account mapping configured.", file=sys.stderr)
-            print("Run 'lunchsync-sg --setup' or 'lunchsync-sg --lm-setup' to configure.",
-                  file=sys.stderr)
+            print(
+                "Run 'lunchsync-sg --setup' or 'lunchsync-sg --lm-setup' to configure.",
+                file=sys.stderr,
+            )
             return 1
 
         # Show which accounts have mappings
@@ -276,8 +299,10 @@ Supported banks:
                     print(f"  {acc} -> (not mapped, will skip)", file=sys.stderr)
 
         if unmapped:
-            print(f"\nWarning: {len(unmapped)} unmapped accounts: {', '.join(sorted(unmapped))}",
-                  file=sys.stderr)
+            print(
+                f"\nWarning: {len(unmapped)} unmapped accounts: {', '.join(sorted(unmapped))}",
+                file=sys.stderr,
+            )
 
         if args.dry_run:
             # Group transactions by account
@@ -295,16 +320,21 @@ Supported banks:
                 asset_id = account_mapping.get(acc)
 
                 if asset_id:
-                    print(f"  {acc} -> asset {asset_id} ({len(txs)} transactions):",
-                          file=sys.stderr)
+                    print(
+                        f"  {acc} -> asset {asset_id} ({len(txs)} transactions):", file=sys.stderr
+                    )
                     for tx in txs:
                         ext_id = generate_external_id(tx)[:16] + "..."
-                        print(f"    {tx.date}  {tx.amount:>10}  {tx.description[:40]:<40}  "
-                              f"[{ext_id}]", file=sys.stderr)
+                        print(
+                            f"    {tx.date}  {tx.amount:>10}  {tx.description[:40]:<40}  "
+                            f"[{ext_id}]",
+                            file=sys.stderr,
+                        )
                     uploadable += len(txs)
                 else:
-                    print(f"  {acc} (not mapped - {len(txs)} transactions skipped)",
-                          file=sys.stderr)
+                    print(
+                        f"  {acc} (not mapped - {len(txs)} transactions skipped)", file=sys.stderr
+                    )
                     skipped += len(txs)
                 print(file=sys.stderr)
 
@@ -312,10 +342,20 @@ Supported banks:
             print(f"  Would upload: {uploadable} transactions", file=sys.stderr)
             print(f"  Would skip (unmapped): {skipped} transactions", file=sys.stderr)
             if normalizer.pending_skipped > 0:
-                print(f"  Skipped (pending): {normalizer.pending_skipped} transactions",
-                      file=sys.stderr)
-            print("\nNote: Lunch Money will also skip duplicates based on external_id "
-                  "and date/payee/amount.", file=sys.stderr)
+                print(
+                    f"  Skipped (pending): {normalizer.pending_skipped} transactions",
+                    file=sys.stderr,
+                )
+            print(
+                "\nNote: Lunch Money will also skip duplicates based on external_id "
+                "and date/payee/amount.",
+                file=sys.stderr,
+            )
+            if args.categorize_with_jev or get_jev_enabled(config):
+                print(
+                    "JEV categorization runs only after upload and is not included in dry-run.",
+                    file=sys.stderr,
+                )
             return 0
 
         # Actually upload
@@ -334,7 +374,58 @@ Supported banks:
             for error in result.errors:
                 print(f"    - {error}", file=sys.stderr)
 
-        return 0 if not result.errors else 1
+        categorization_errors: list[str] = []
+        if args.categorize_with_jev or get_jev_enabled(config):
+            from lunchsync_sg.categorization import categorize_created_transactions
+            from lunchsync_sg.jev import JevClient
+            from lunchsync_sg.secrets import resolve_1password_secret
+
+            jev_api_key = get_jev_api_key(config, args.jev_api_key)
+            if not jev_api_key:
+                secret_reference = get_jev_secret_reference(config)
+                if secret_reference:
+                    try:
+                        jev_api_key = resolve_1password_secret(
+                            secret_reference,
+                            get_op_keychain_service(config),
+                        )
+                    except RuntimeError as e:
+                        categorization_errors.append(str(e))
+                else:
+                    categorization_errors.append(
+                        "JEV API key required. Use --jev-api-key, JEV_API_KEY, or configure "
+                        "jev.secret_reference."
+                    )
+
+            if jev_api_key and result.created_ids:
+                category_result = categorize_created_transactions(
+                    client,
+                    JevClient(jev_api_key),
+                    result.created_ids,
+                )
+                categorization_errors.extend(category_result.errors)
+                print("\nJEV categorization:", file=sys.stderr)
+                print(
+                    f"  Already categorized by Lunch Money rules: "
+                    f"{category_result.already_categorized}",
+                    file=sys.stderr,
+                )
+                print(f"  Categorized by JEV: {category_result.categorized}", file=sys.stderr)
+                print(
+                    f"  Left uncategorized for review: {category_result.unmatched}", file=sys.stderr
+                )
+            elif jev_api_key:
+                print(
+                    "\nJEV categorization: no newly-created transactions to categorize.",
+                    file=sys.stderr,
+                )
+
+            if categorization_errors:
+                print(f"  Categorization errors: {len(categorization_errors)}", file=sys.stderr)
+                for error in categorization_errors:
+                    print(f"    - {error}", file=sys.stderr)
+
+        return 0 if not result.errors and not categorization_errors else 1
 
     # Write output
     output_path = Path(args.output)
