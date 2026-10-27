@@ -191,9 +191,9 @@ class TestLunchMoneyClient:
         assert result.uploaded == 3
         assert result.skipped == 0
         assert result.errors == []
-
-        request_json = mock_session.request.call_args.kwargs["json"]
-        assert request_json["apply_rules"] is True
+        # Lunch Money's own rules (categories etc.) run on every upload
+        body = mock_session.request.call_args.kwargs["json"]
+        assert body["apply_rules"] is True
 
     @patch("lunchsync_sg.lunchmoney.requests.Session")
     def test_upload_skips_unmapped_accounts(self, mock_session_class: MagicMock) -> None:
