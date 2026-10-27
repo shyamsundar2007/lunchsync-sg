@@ -10,6 +10,7 @@ Sync bank transactions from Singapore banks to [Lunch Money](https://lunchmoney.
 - **HSBC**: Revolution Card
 - **Citibank**: Rewards, Prestige
 - **AMEX**: KrisFlyer Ascend
+- **Trust**: Freedom credit card (from email alerts, see below)
 
 ## Quick Start
 
@@ -64,6 +65,25 @@ uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run
 # Export to CSV instead
 uv run lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
 ```
+
+### Trust (email alerts)
+
+Trust has no transaction export, but it emails an alert for every card purchase, refund
+and cancelled purchase. `--trust-email` reads them from Fastmail and uploads the ones
+Lunch Money doesn't have yet. Map an asset named `Trust Freedom` in `account_mapping`,
+and give it a Fastmail API token with read-only Email scope:
+
+```bash
+FASTMAIL_API_TOKEN=... lunchsync-sg --trust-email --dry-run
+FASTMAIL_API_TOKEN=... lunchsync-sg --trust-email --since 2026-01-01
+```
+
+It is safe to run on a schedule: each alert's Message-ID becomes its `external_id`, so
+nothing is uploaded twice, and a cancelled purchase is dropped (or offset, if it was
+already uploaded). An alert in an unknown format makes it exit 1.
+
+Uploads ask Lunch Money to apply your rules (`apply_rules`), so payee rules set
+categories as transactions arrive.
 
 ## Configuration
 
