@@ -103,6 +103,7 @@ class LunchMoneyClient:
         transactions: list[Transaction],
         account_mapping: dict[str, int],
         skip_duplicates: bool = True,
+        apply_rules: bool = False,
     ) -> UploadResult:
         """Upload transactions to Lunch Money.
 
@@ -110,6 +111,7 @@ class LunchMoneyClient:
             transactions: List of Transaction objects to upload
             account_mapping: Map of account names to Lunch Money asset IDs
             skip_duplicates: Use API's duplicate detection (default True)
+            apply_rules: Apply the account's Lunch Money rules (categories etc.)
 
         Returns:
             UploadResult with counts of uploaded, skipped, and errors
@@ -139,6 +141,7 @@ class LunchMoneyClient:
                         "transactions": batch,
                         "debit_as_negative": True,
                         "skip_duplicates": skip_duplicates,
+                        "apply_rules": apply_rules,
                     },
                 )
 

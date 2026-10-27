@@ -87,7 +87,9 @@ def run_trust_sync(
 
     errors = list(failures)
     if new and not dry_run:
-        result = lm.upload_transactions(new, {account: asset_id}, skip_duplicates=False)
+        result = lm.upload_transactions(
+            new, {account: asset_id}, skip_duplicates=False, apply_rules=True
+        )
         _err(f"Uploaded {result.uploaded} to asset {asset_id}")
         if result.uploaded != len(new):
             errors.append(f"expected {len(new)} uploads, Lunch Money created {result.uploaded}")

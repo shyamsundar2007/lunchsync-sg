@@ -193,7 +193,7 @@ class TestRunTrustSync:
             return []
         txs, mapping = lm.upload_transactions.call_args.args
         assert mapping == {"Trust Freedom": 42}
-        assert lm.upload_transactions.call_args.kwargs == {"skip_duplicates": False}
+        assert lm.upload_transactions.call_args.kwargs == {"skip_duplicates": False, "apply_rules": True}
         return list(txs)
 
     def test_uploads_only_new(self) -> None:
