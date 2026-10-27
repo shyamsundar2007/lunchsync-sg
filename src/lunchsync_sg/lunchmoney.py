@@ -82,6 +82,22 @@ class LunchMoneyClient:
         result = self._request("GET", "assets")
         return result.get("assets", [])  # type: ignore[no-any-return]
 
+    def get_external_ids(self, asset_id: int, start_date: str, end_date: str) -> set[str]:
+        """external_ids of an asset's transactions between two ISO dates (inclusive)."""
+        ids: set[str] = set()
+        offset = 0
+        while True:
+            params = (
+                f"asset_id={asset_id}&start_date={start_date}&end_date={end_date}"
+                f"&offset={offset}&limit=500"
+            )
+            result = self._request("GET", f"transactions?{params}")
+            batch = result.get("transactions", [])
+            ids.update(tx["external_id"] for tx in batch if tx.get("external_id"))
+            if not result.get("has_more") or not batch:
+                return ids
+            offset += len(batch)
+
     def upload_transactions(
         self,
         transactions: list[Transaction],

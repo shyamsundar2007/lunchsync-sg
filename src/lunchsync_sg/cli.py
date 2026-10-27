@@ -30,6 +30,7 @@ Examples:
   lunchsync-sg ~/Downloads/ --upload-lunchmoney
   lunchsync-sg ~/Downloads/ --upload-lunchmoney --dry-run
   lunchsync-sg --list-parsers
+  lunchsync-sg --trust-email --since 2026-01-01 --dry-run
 
 Supported banks:
   - OCBC (Credit Card, 360 Account)
@@ -37,6 +38,7 @@ Supported banks:
   - UOB (Lady's Solitaire, Platinum VISA)
   - HSBC (Revolution)
   - Citibank (Rewards, Prestige)
+  - Trust (Freedom credit card, from email alerts)
         """,
     )
 
@@ -76,7 +78,10 @@ Supported banks:
         "--since",
         type=str,
         metavar="DATE",
-        help="Only include transactions on or after this date (YYYY-MM-DD or DD/MM/YYYY)",
+        help=(
+            "Only include transactions on or after this date (YYYY-MM-DD or DD/MM/YYYY); "
+            "with --trust-email, default 45 days ago"
+        ),
     )
     parser.add_argument(
         "--config",
@@ -128,6 +133,13 @@ Supported banks:
         help="Show what would be uploaded without actually uploading",
     )
 
+    # Trust Bank (email alerts, no export)
+    parser.add_argument(
+        "--trust-email",
+        action="store_true",
+        help="Sync Trust card alert emails from Fastmail (needs FASTMAIL_API_TOKEN)",
+    )
+
     args = parser.parse_args()
 
     # Handle setup first (before loading config)
@@ -177,6 +189,20 @@ Supported banks:
             print(f"Error during setup: {e}", file=sys.stderr)
             return 1
         return 0
+
+    if args.trust_email:
+        from lunchsync_sg.trust_sync import run_trust_sync
+
+        trust_since = None
+        if args.since:
+            trust_since = _parse_since_date(args.since)
+            if trust_since is None:
+                print(f"Error: Invalid date format '{args.since}'. Use YYYY-MM-DD or DD/MM/YYYY",
+                      file=sys.stderr)
+                return 1
+        return run_trust_sync(
+            config, since=trust_since, dry_run=args.dry_run, lm_api_key=args.lm_api_key
+        )
 
     # Check if first run (no config and no inputs)
     if not config_exists() and not args.inputs:
