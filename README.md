@@ -91,26 +91,9 @@ Configuration is stored in `~/.config/lunchsync-sg/config.json`:
       "OCBC Rewards": 12345,
       "OCBC 360": 67890
     }
-  },
-  "jev": {
-    "enabled": true,
-    "secret_reference": "op://Automation/JEV API/credential",
-    "op_service_account_keychain_service": "op-service-account"
   }
 }
 ```
-
-When JEV is enabled, uploads follow this sequence:
-
-1. Lunch Money creates transactions with `apply_rules` enabled.
-2. LunchSync reads back only the newly-created transactions.
-3. Transactions already categorized by Lunch Money rules are left unchanged.
-4. Remaining transactions are sent to JEV and updated with its selected category.
-5. Every transaction remains `uncleared` for manual review.
-
-The example uses a 1Password secret reference, so the JEV key is never stored in this config.
-The optional Keychain service contains the 1Password service-account token used by `op read`.
-You can instead supply `JEV_API_KEY` or `--jev-api-key`.
 
 ### Managing Accounts
 
@@ -149,9 +132,6 @@ uv run lunchsync-sg --show-config
 
 # Upload to Lunch Money
 uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney
-
-# Upload and categorize with JEV (when not enabled in config)
-uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --categorize-with-jev
 
 # Dry run (preview without uploading)
 uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run

@@ -16,10 +16,5 @@
   "lunch_money": {
     "api_key": null,
     "account_mapping": {}
-  },
-  "jev": {
-    "enabled": false,
-    "secret_reference": "op://Automation/JEV API/credential",
-    "op_service_account_keychain_service": "op-service-account"
   }
 }
