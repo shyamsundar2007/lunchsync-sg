@@ -28,6 +28,11 @@ _PATTERNS: list[tuple[AlertKind, re.Pattern[str]]] = [
         rf"You{_APOS}ve spent {_AMOUNT} at (?P<merchant>.+?) on {_WHEN} "
         r"with Freedom credit card\."
     )),
+    # "Overseas transaction successful" alerts name the card before the merchant.
+    ("spend", re.compile(
+        rf"You{_APOS}ve spent {_AMOUNT} using Freedom credit card at (?P<merchant>.+?) "
+        rf"on {_WHEN}\."
+    )),
     ("cancel", re.compile(
         rf"We{_APOS}ve cancelled your purchase of {_AMOUNT} at (?P<merchant>.+?) on {_WHEN} "
         r"with Freedom credit card\."

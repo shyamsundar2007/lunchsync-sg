@@ -35,6 +35,10 @@ SPEND_FX = (
     "You've spent USD 12.00 at Example Store San Francisco US on 3 Nov 2026 01:05SGT "
     "with Freedom credit card. Not you? Alert us via the Trust App."
 )
+SPEND_OVERSEAS = (
+    "0% FX fees! You&#39;ve spent USD 25.00 using Freedom credit card at EXAMPLE*VISA "
+    "OFFICE New Delhi IN on 28 Oct 2026 19:02SGT. Not you? Alert us via Trust App."
+)
 CANCEL = (
     "We've cancelled your purchase of SGD 1.00 at Grab* Singapore SG on "
     "23 Oct 2026 11:28SGT with Freedom credit card."
@@ -67,6 +71,16 @@ class TestParseAlert:
         alert = parse_alert("Yay! Transaction successful 😁", email(SPEND_FX), "<b@ses>")
         assert alert is not None
         assert (alert.currency, alert.amount) == ("USD", Decimal("12.00"))
+
+    def test_overseas(self) -> None:
+        alert = parse_alert(
+            "Yay! Overseas transaction successful 😁", email(SPEND_OVERSEAS), "<o@ses>"
+        )
+        assert alert is not None
+        assert alert.kind == "spend"
+        assert (alert.currency, alert.amount) == ("USD", Decimal("25.00"))
+        assert alert.when == datetime(2026, 10, 28, 19, 2)
+        assert alert.merchant == "EXAMPLE*VISA OFFICE New Delhi IN"
 
     def test_cancel(self) -> None:
         alert = parse_alert("Oops! Transaction cancelled 💳", email(CANCEL), "<c@ses>")
