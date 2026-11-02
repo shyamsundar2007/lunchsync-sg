@@ -108,9 +108,9 @@ _COUNTRY_CURRENCY = {
     ),
 }
 
-# Domestic merchants end in "SINGAPORE SGP" (Citi, DBS) or "SG SGP" (OCBC);
-# overseas ones keep city and country.
-_DOMESTIC_SUFFIX = re.compile(r"\s+(SINGAPORE|SG)\s+SGP$", re.I)
+# Domestic merchants end in "SINGAPORE SGP" (Citi, DBS), "SG SGP" or
+# "Singapore SG" (OCBC); overseas ones keep city and country.
+_DOMESTIC_SUFFIX = re.compile(r"\s+(SINGAPORE|SG)\s+SGP?$", re.I)
 
 
 def _hsbc(text: str, message_id: str) -> CardAlert | None:

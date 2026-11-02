@@ -226,6 +226,8 @@ Supported banks:
             except Exception as e:
                 print(f"Error: {name} sync failed: {e}", file=sys.stderr)
                 code = 1
+        if args.dry_run:
+            print("Dry run: nothing uploaded", file=sys.stderr)
         return code
 
     # Check if first run (no config and no inputs)

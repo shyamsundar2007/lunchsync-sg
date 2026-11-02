@@ -218,6 +218,7 @@ class TestParse:
     [
         ("EXAMPLE STORE SINGAPORE SGP", "EXAMPLE STORE"),
         ("Example Pte. Ltd. SG SGP", "Example Pte. Ltd."),
+        ("EXAMPLE SG MP Singapore SG", "EXAMPLE SG MP"),
         ("Example Store Singapore SGP", "Example Store"),
         ("EXAMPLE CAR HIRE CAIRNS AUS", "EXAMPLE CAR HIRE CAIRNS AUS"),
         ("KOPI CORNER - CBD", "KOPI CORNER - CBD"),

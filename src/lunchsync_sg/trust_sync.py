@@ -94,8 +94,6 @@ def run_trust_sync(
         if result.uploaded != len(new):
             errors.append(f"expected {len(new)} uploads, Lunch Money created {result.uploaded}")
         errors.extend(result.errors)
-    elif dry_run:
-        _err("Dry run: nothing uploaded")
 
     for error in errors:
         _err(f"Error: {error}")

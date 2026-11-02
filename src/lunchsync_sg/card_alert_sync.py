@@ -147,8 +147,6 @@ def run_card_alert_sync(
         _err(f"{skipped} alerts for cards not listed under card_alerts were ignored")
     if unmatched:
         _err(f"{unmatched} reversals of holds that sent no charge alert were ignored")
-    if dry_run:
-        _err("Dry run: nothing uploaded")
     for error in errors:
         _err(f"Error: {error}")
     return 1 if errors else 0
