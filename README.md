@@ -85,9 +85,9 @@ already uploaded). An alert in an unknown format makes it exit 1.
 Uploads ask Lunch Money to apply your rules (`apply_rules`), so payee rules set
 categories as transactions arrive.
 
-### HSBC, DBS and Citi (email alerts)
+### HSBC, DBS, Citi, UOB and OCBC (email alerts)
 
-`--card-alerts` does the same for HSBC, DBS and Citi credit card alert emails. Each
+`--card-alerts` does the same for HSBC, DBS, Citi, UOB and OCBC credit card alert emails. Each
 charge is uploaded dated on the transaction date. Set each bank's alert threshold to
 the minimum so every charge sends an email. Only cards listed under `card_alerts` are
 synced, each from its own start date. Pick a date after the last statement export you
@@ -102,7 +102,10 @@ uploaded for that card, so alerts never overlap it:
 
 Cards are matched to accounts by the last four digits of `card_number`. When an alert
 leaves out the currency (Citi does on some overseas charges), the currency is taken from
-the merchant's country code. A charge alert in an unknown format, such as a refund
+the merchant's country code. UOB also emails when a hold is released ("transaction
+reversed"): the reversal cancels the matching charge, or is uploaded as a credit if the
+charge is already in Lunch Money. The final amount of a hold (taxi fares) arrives without an
+alert and only shows up on the statement. A charge alert in an unknown format, such as a refund
 template not seen yet, makes it exit 1.
 
 ```bash

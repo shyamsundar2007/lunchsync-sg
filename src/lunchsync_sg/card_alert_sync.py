@@ -1,4 +1,4 @@
-"""Sync HSBC, DBS and Citi card alert emails from Fastmail into Lunch Money.
+"""Sync HSBC, DBS, Citi, UOB and OCBC card alert emails from Fastmail into Lunch Money.
 
 Only cards listed under `card_alerts` in config.json are synced, each from
 its own start date, so alerts never overlap transactions already uploaded
@@ -16,6 +16,7 @@ from lunchsync_sg.card_alerts import (
     SOURCES,
     CardAlert,
     CardAlertError,
+    pair_reversals,
     parse_card_alert,
     to_transaction,
 )
@@ -81,8 +82,9 @@ def run_card_alert_sync(
     fastmail = FastmailClient(token)
 
     failures: list[str] = []
-    wanted: dict[str, list[Transaction]] = {account: [] for account in starts}
-    skipped = 0
+    charges: dict[str, list[Transaction]] = {account: [] for account in starts}
+    voided: dict[str, list[tuple[Transaction, Transaction]]] = {account: [] for account in starts}
+    skipped = unmatched = 0
     for source in SOURCES:
         alerts: list[CardAlert] = []
         for email in fastmail.fetch_from(source.sender, fetch_from):
@@ -93,28 +95,42 @@ def run_card_alert_sync(
                 continue
             if alert:
                 alerts.append(alert)
-        for alert in alerts:
+        batch = pair_reversals(alerts)
+        unmatched += len(batch.unmatched_reversals)
+        for alert, reversal in [(c, None) for c in batch.charges] + list(batch.voided):
             account = by_last4.get(alert.last4)
             if account is None:
                 failures.append(f"{source.bank} card ending {alert.last4} is not in accounts")
             elif account not in starts:
                 skipped += 1
             elif alert.when.date() >= max(since, starts[account]):
-                wanted[account].append(to_transaction(alert, account))
+                charge = to_transaction(alert, account)
+                if reversal is None:
+                    charges[account].append(charge)
+                else:
+                    voided[account].append((charge, to_transaction(reversal, account)))
 
     lm = LunchMoneyClient(api_key)
     errors = list(failures)
-    for account, transactions in wanted.items():
+    for account in starts:
         asset_id = asset_ids[account]
         first = max(since, starts[account])
         existing = lm.get_external_ids(
             asset_id, first.isoformat(), (date.today() + timedelta(days=1)).isoformat()
         )
-        new = sorted(
-            (tx for tx in transactions if generate_external_id(tx) not in existing),
-            key=lambda tx: tx.date,
+        new = [tx for tx in charges[account] if generate_external_id(tx) not in existing]
+        # A reversed charge already in Lunch Money is offset; one that never
+        # went up is dropped along with its reversal.
+        new += [
+            reversal for charge, reversal in voided[account]
+            if generate_external_id(charge) in existing
+            and generate_external_id(reversal) not in existing
+        ]
+        new.sort(key=lambda tx: tx.date)
+        _err(
+            f"{account}: {len(charges[account])} charges since {first}, "
+            f"{len(voided[account])} reversed, {len(new)} new"
         )
-        _err(f"{account}: {len(transactions)} alerts since {first}, {len(new)} new")
         _print_table(new)
         if new and not dry_run:
             result = lm.upload_transactions(
@@ -129,6 +145,8 @@ def run_card_alert_sync(
 
     if skipped:
         _err(f"{skipped} alerts for cards not listed under card_alerts were ignored")
+    if unmatched:
+        _err(f"{unmatched} reversals of holds that sent no charge alert were ignored")
     if dry_run:
         _err("Dry run: nothing uploaded")
     for error in errors:

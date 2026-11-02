@@ -144,7 +144,7 @@ Supported banks:
         "--card-alerts",
         action="store_true",
         help=(
-            "Sync HSBC, DBS and Citi card alert emails from Fastmail for the cards "
+            "Sync HSBC, DBS, Citi, UOB and OCBC card alert emails from Fastmail for the cards "
             "listed under card_alerts in config.json (needs FASTMAIL_API_TOKEN)"
         ),
     )
