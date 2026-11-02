@@ -31,6 +31,7 @@ Examples:
   lunchsync-sg ~/Downloads/ --upload-lunchmoney --dry-run
   lunchsync-sg --list-parsers
   lunchsync-sg --trust-email --since 2026-01-01 --dry-run
+  lunchsync-sg --card-alerts --dry-run
 
 Supported banks:
   - OCBC (Credit Card, 360 Account)
@@ -80,7 +81,7 @@ Supported banks:
         metavar="DATE",
         help=(
             "Only include transactions on or after this date (YYYY-MM-DD or DD/MM/YYYY); "
-            "with --trust-email, default 45 days ago"
+            "with --trust-email or --card-alerts, default 45 days ago"
         ),
     )
     parser.add_argument(
@@ -139,6 +140,14 @@ Supported banks:
         action="store_true",
         help="Sync Trust card alert emails from Fastmail (needs FASTMAIL_API_TOKEN)",
     )
+    parser.add_argument(
+        "--card-alerts",
+        action="store_true",
+        help=(
+            "Sync HSBC, DBS and Citi card alert emails from Fastmail for the cards "
+            "listed under card_alerts in config.json (needs FASTMAIL_API_TOKEN)"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -190,18 +199,24 @@ Supported banks:
             return 1
         return 0
 
-    if args.trust_email:
-        from lunchsync_sg.trust_sync import run_trust_sync
-
-        trust_since = None
+    if args.trust_email or args.card_alerts:
+        alert_since = None
         if args.since:
-            trust_since = _parse_since_date(args.since)
-            if trust_since is None:
+            alert_since = _parse_since_date(args.since)
+            if alert_since is None:
                 print(f"Error: Invalid date format '{args.since}'. Use YYYY-MM-DD or DD/MM/YYYY",
                       file=sys.stderr)
                 return 1
+        if args.card_alerts:
+            from lunchsync_sg.card_alert_sync import run_card_alert_sync
+
+            return run_card_alert_sync(
+                config, since=alert_since, dry_run=args.dry_run, lm_api_key=args.lm_api_key
+            )
+        from lunchsync_sg.trust_sync import run_trust_sync
+
         return run_trust_sync(
-            config, since=trust_since, dry_run=args.dry_run, lm_api_key=args.lm_api_key
+            config, since=alert_since, dry_run=args.dry_run, lm_api_key=args.lm_api_key
         )
 
     # Check if first run (no config and no inputs)
