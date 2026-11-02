@@ -31,7 +31,6 @@ Examples:
   lunchsync-sg ~/Downloads/ --upload-lunchmoney
   lunchsync-sg ~/Downloads/ --upload-lunchmoney --dry-run
   lunchsync-sg --list-parsers
-  lunchsync-sg --trust-email --since 2026-01-01 --dry-run
   lunchsync-sg --email-alerts --dry-run
 
 Supported banks:
@@ -82,7 +81,7 @@ Supported banks:
         metavar="DATE",
         help=(
             "Only include transactions on or after this date (YYYY-MM-DD or DD/MM/YYYY); "
-            "with --email-alerts, --trust-email or --card-alerts, default 45 days ago"
+            "with --email-alerts, default 45 days ago"
         ),
     )
     parser.add_argument(
@@ -144,19 +143,6 @@ Supported banks:
             "card_alerts in config.json (needs FASTMAIL_API_TOKEN)"
         ),
     )
-    parser.add_argument(
-        "--trust-email",
-        action="store_true",
-        help="Sync only Trust card alert emails (part of --email-alerts)",
-    )
-    parser.add_argument(
-        "--card-alerts",
-        action="store_true",
-        help=(
-            "Sync only HSBC, DBS, Citi, UOB and OCBC card alert emails for the cards listed "
-            "under card_alerts in config.json (part of --email-alerts)"
-        ),
-    )
 
     args = parser.parse_args()
 
@@ -208,7 +194,7 @@ Supported banks:
             return 1
         return 0
 
-    if args.email_alerts or args.trust_email or args.card_alerts:
+    if args.email_alerts:
         alert_since = None
         if args.since:
             alert_since = _parse_since_date(args.since)
@@ -216,14 +202,20 @@ Supported banks:
                 print(f"Error: Invalid date format '{args.since}'. Use YYYY-MM-DD or DD/MM/YYYY",
                       file=sys.stderr)
                 return 1
-        from lunchsync_sg.card_alert_sync import run_card_alert_sync
-        from lunchsync_sg.trust_sync import run_trust_sync
+        from lunchsync_sg.card_alert_sync import card_alert_starts, run_card_alert_sync
+        from lunchsync_sg.trust_sync import DEFAULT_ACCOUNT, run_trust_sync
 
+        # Sync whichever sources are set up: Trust once its asset is mapped,
+        # other cards once they are listed under card_alerts.
         syncs: list[tuple[str, Callable[..., int]]] = []
-        if args.email_alerts or args.trust_email:
+        if DEFAULT_ACCOUNT in get_lunchmoney_account_mapping(config):
             syncs.append(("Trust", run_trust_sync))
-        if args.email_alerts or args.card_alerts:
+        if card_alert_starts(config):
             syncs.append(("Card alerts", run_card_alert_sync))
+        if not syncs:
+            print(f"Error: nothing to sync; map a {DEFAULT_ACCOUNT!r} asset or list cards "
+                  "under card_alerts in config.json", file=sys.stderr)
+            return 1
         # Run every sync even if one fails, so one bank can't block the others.
         code = 0
         for name, run_sync in syncs:

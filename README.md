@@ -66,32 +66,26 @@ uv run lunchsync-sg ~/Downloads/bank-exports/ --upload-lunchmoney --dry-run
 uv run lunchsync-sg ~/Downloads/bank-exports/ -o transactions.csv
 ```
 
-### Trust (email alerts)
+### Card alert emails
 
-Trust has no transaction export, but it emails an alert for every card purchase, refund
-and cancelled purchase. `--trust-email` reads them from Fastmail and uploads the ones
-Lunch Money doesn't have yet. Map an asset named `Trust Freedom` in `account_mapping`,
-and give it a Fastmail API token with read-only Email scope:
+Trust has no transaction export, and the other banks only export between statements, but
+they all email an alert for each card charge. `--email-alerts` reads these from Fastmail and
+uploads the ones Lunch Money doesn't have yet, dated on the transaction date. Give it a
+Fastmail API token with read-only Email scope:
 
 ```bash
-FASTMAIL_API_TOKEN=... lunchsync-sg --trust-email --dry-run
-FASTMAIL_API_TOKEN=... lunchsync-sg --trust-email --since 2026-01-01
+FASTMAIL_API_TOKEN=... lunchsync-sg --email-alerts --dry-run
+FASTMAIL_API_TOKEN=... lunchsync-sg --email-alerts --since 2026-01-01
 ```
 
-It is safe to run on a schedule: each alert's Message-ID becomes its `external_id`, so
-nothing is uploaded twice, and a cancelled purchase is dropped (or offset, if it was
-already uploaded). An alert in an unknown format makes it exit 1.
+It syncs whichever sources are set up in config.json:
 
-Uploads ask Lunch Money to apply your rules (`apply_rules`), so payee rules set
-categories as transactions arrive.
-
-### HSBC, DBS, Citi, UOB and OCBC (email alerts)
-
-`--card-alerts` does the same for HSBC, DBS, Citi, UOB and OCBC credit card alert emails. Each
-charge is uploaded dated on the transaction date. Set each bank's alert threshold to
-the minimum so every charge sends an email. Only cards listed under `card_alerts` are
-synced, each from its own start date. Pick a date after the last statement export you
-uploaded for that card, so alerts never overlap it:
+- **Trust** (purchases, refunds, cancelled purchases): map an asset named `Trust Freedom`
+  in `account_mapping`.
+- **HSBC, DBS, Citi, UOB and OCBC**: list the cards under `card_alerts`, each with a start
+  date. Pick a date after the last statement export you uploaded for that card, so alerts
+  never overlap it. Set each bank's alert threshold to the minimum so every charge sends
+  an email.
 
 ```json
 "card_alerts": {
@@ -100,24 +94,22 @@ uploaded for that card, so alerts never overlap it:
 }
 ```
 
-Cards are matched to accounts by the last four digits of `card_number`. When an alert
-leaves out the currency (Citi does on some overseas charges), the currency is taken from
-the merchant's country code. UOB also emails when a hold is released ("transaction
-reversed"): the reversal cancels the matching charge, or is uploaded as a credit if the
-charge is already in Lunch Money. The final amount of a hold (taxi fares) arrives without an
-alert and only shows up on the statement. A charge alert in an unknown format, such as a refund
-template not seen yet, makes it exit 1.
+It is safe to run on a schedule: each alert's Message-ID becomes its `external_id`, so
+nothing is uploaded twice. Trust and the other cards each run even if the other fails. It
+exits 1 if any alert is in an unknown format (such as a refund template not seen yet) or an
+upload fails.
 
-```bash
-FASTMAIL_API_TOKEN=... lunchsync-sg --card-alerts --dry-run
-```
+Details:
 
-`--email-alerts` runs both the Trust and the card alert syncs. Each runs even if the other
-fails, and it exits 1 if either did:
-
-```bash
-FASTMAIL_API_TOKEN=... lunchsync-sg --email-alerts
-```
+- Cards are matched to accounts by the last four digits of `card_number`.
+- When a Citi alert leaves out the currency (some overseas charges), the currency is taken
+  from the merchant's country code.
+- A cancelled Trust purchase, or a released UOB hold ("transaction reversed"), is dropped
+  along with its charge, or offset with a credit if the charge was already uploaded. The
+  final amount of a hold (taxi fares) arrives without an alert and only shows up on the
+  statement.
+- Uploads ask Lunch Money to apply your rules (`apply_rules`), so payee rules set categories
+  as transactions arrive.
 
 ## Configuration
 
