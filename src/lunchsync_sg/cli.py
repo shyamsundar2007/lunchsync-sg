@@ -3,6 +3,7 @@
 
 import argparse
 import sys
+from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,7 @@ Examples:
   lunchsync-sg ~/Downloads/ --upload-lunchmoney --dry-run
   lunchsync-sg --list-parsers
   lunchsync-sg --trust-email --since 2026-01-01 --dry-run
-  lunchsync-sg --card-alerts --dry-run
+  lunchsync-sg --email-alerts --dry-run
 
 Supported banks:
   - OCBC (Credit Card, 360 Account)
@@ -81,7 +82,7 @@ Supported banks:
         metavar="DATE",
         help=(
             "Only include transactions on or after this date (YYYY-MM-DD or DD/MM/YYYY); "
-            "with --trust-email or --card-alerts, default 45 days ago"
+            "with --email-alerts, --trust-email or --card-alerts, default 45 days ago"
         ),
     )
     parser.add_argument(
@@ -134,18 +135,26 @@ Supported banks:
         help="Show what would be uploaded without actually uploading",
     )
 
-    # Trust Bank (email alerts, no export)
+    # Card alert emails (Trust has no export; the others are synced between statements)
+    parser.add_argument(
+        "--email-alerts",
+        action="store_true",
+        help=(
+            "Sync all card alert emails from Fastmail: Trust, plus the cards listed under "
+            "card_alerts in config.json (needs FASTMAIL_API_TOKEN)"
+        ),
+    )
     parser.add_argument(
         "--trust-email",
         action="store_true",
-        help="Sync Trust card alert emails from Fastmail (needs FASTMAIL_API_TOKEN)",
+        help="Sync only Trust card alert emails (part of --email-alerts)",
     )
     parser.add_argument(
         "--card-alerts",
         action="store_true",
         help=(
-            "Sync HSBC, DBS, Citi, UOB and OCBC card alert emails from Fastmail for the cards "
-            "listed under card_alerts in config.json (needs FASTMAIL_API_TOKEN)"
+            "Sync only HSBC, DBS, Citi, UOB and OCBC card alert emails for the cards listed "
+            "under card_alerts in config.json (part of --email-alerts)"
         ),
     )
 
@@ -199,7 +208,7 @@ Supported banks:
             return 1
         return 0
 
-    if args.trust_email or args.card_alerts:
+    if args.email_alerts or args.trust_email or args.card_alerts:
         alert_since = None
         if args.since:
             alert_since = _parse_since_date(args.since)
@@ -207,17 +216,25 @@ Supported banks:
                 print(f"Error: Invalid date format '{args.since}'. Use YYYY-MM-DD or DD/MM/YYYY",
                       file=sys.stderr)
                 return 1
-        if args.card_alerts:
-            from lunchsync_sg.card_alert_sync import run_card_alert_sync
-
-            return run_card_alert_sync(
-                config, since=alert_since, dry_run=args.dry_run, lm_api_key=args.lm_api_key
-            )
+        from lunchsync_sg.card_alert_sync import run_card_alert_sync
         from lunchsync_sg.trust_sync import run_trust_sync
 
-        return run_trust_sync(
-            config, since=alert_since, dry_run=args.dry_run, lm_api_key=args.lm_api_key
-        )
+        syncs: list[tuple[str, Callable[..., int]]] = []
+        if args.email_alerts or args.trust_email:
+            syncs.append(("Trust", run_trust_sync))
+        if args.email_alerts or args.card_alerts:
+            syncs.append(("Card alerts", run_card_alert_sync))
+        # Run every sync even if one fails, so one bank can't block the others.
+        code = 0
+        for name, run_sync in syncs:
+            try:
+                code |= run_sync(
+                    config, since=alert_since, dry_run=args.dry_run, lm_api_key=args.lm_api_key
+                )
+            except Exception as e:
+                print(f"Error: {name} sync failed: {e}", file=sys.stderr)
+                code = 1
+        return code
 
     # Check if first run (no config and no inputs)
     if not config_exists() and not args.inputs:

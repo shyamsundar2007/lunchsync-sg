@@ -112,6 +112,13 @@ template not seen yet, makes it exit 1.
 FASTMAIL_API_TOKEN=... lunchsync-sg --card-alerts --dry-run
 ```
 
+`--email-alerts` runs both the Trust and the card alert syncs. Each runs even if the other
+fails, and it exits 1 if either did:
+
+```bash
+FASTMAIL_API_TOKEN=... lunchsync-sg --email-alerts
+```
+
 ## Configuration
 
 Configuration is stored in `~/.config/lunchsync-sg/config.json`:
