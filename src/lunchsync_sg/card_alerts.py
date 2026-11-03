@@ -1,24 +1,26 @@
-"""Parse credit card transaction alert emails from HSBC, DBS, Citi, UOB and OCBC.
+"""Parse transaction alert emails from HSBC, DBS, Citi, UOB and OCBC.
 
-Each alert becomes one transaction dated on the transaction date. The
-statement later carries the posting date. Alerts identify the card by its
-last four digits, which map to an account through config.json `accounts`.
-UOB also emails when a charge is reversed (a released hold); a reversal
-voids the charge it names.
+Covers credit card charges, plus the OCBC 360 bank account (PayNow, NETS QR,
+transfers, deposits, withdrawals). Each alert becomes one transaction dated
+on the transaction date; the statement later carries the posting date.
+Alerts identify the card or account by its last four digits, which map to an
+account through config.json `accounts`. UOB also emails when a charge is
+reversed (a released hold); a reversal voids the charge it names.
 """
 
 import hashlib
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
 from lunchsync_sg.models import Transaction
 from lunchsync_sg.trust_email import html_to_text
 
-AlertKind = Literal["spend", "reversal"]
+# spend: money out. reversal: a released hold, offsets its charge. credit: money in.
+AlertKind = Literal["spend", "reversal", "credit"]
 
 
 class CardAlertError(ValueError):
@@ -95,6 +97,51 @@ _OCBC = re.compile(
     r"at (?P<merchant>.+?)\. Did not make this transaction"
 )
 
+# OCBC 360 account alerts. Times are 12- or 24-hour, with or without AM/PM
+# ("11:28 AM", "14:52 PM", "12:08pm", "12.00 PM").
+_O_DATE = r"(?P<date>\d{1,2} \w{3} \d{4})"
+_O_TIME = r"(?P<time>\d{1,2}[:.]\d{2}) ?(?P<ampm>[AaPp][Mm])?"
+_O_AMOUNT = rf"(?P<currency>[A-Z]{{3}}) (?P<amount>{_AMOUNT})"
+_O_FROM = r"From your account : .*?\(-\d*(?P<last4>\d{4})\)"
+
+_OCBC_ACCOUNT: list[tuple[AlertKind, re.Pattern[str]]] = [
+    ("spend", re.compile(
+        rf"The following PayNow transfer has been made to (?P<merchant>.+?) using .+? "
+        rf"Date : {_O_DATE} Time : {_O_TIME} SGT Amount : {_O_AMOUNT} {_O_FROM} "
+        r"Description : (?P<note>.*?) ?Reference number"
+    )),
+    ("spend", re.compile(
+        rf"The following NETS QR payment has been made: Date : {_O_DATE} Time : {_O_TIME} SGT "
+        rf"Amount : {_O_AMOUNT} {_O_FROM} To : (?P<merchant>.+?) NETS merchant ID"
+    )),
+    ("spend", re.compile(
+        r"we have sent money to (?P<merchant>.+?) using Virtual Payment Address .+? "
+        rf"Date of Transfer : {_O_DATE} Time of Transfer : {_O_TIME} SGT Amount : {_O_AMOUNT} "
+        rf"{_O_FROM} Description/reference no\."
+    )),
+    ("spend", re.compile(
+        r"We have received your request to make the following transfer: "
+        rf"Date of Transfer : {_O_DATE} Time of Transfer : {_O_TIME} SGT Amount : {_O_AMOUNT} "
+        rf"{_O_FROM} To account : (?P<merchant>.+?) Reference number"
+    )),
+    # One deposit template leaves out the date; the email's arrival date is used.
+    ("credit", re.compile(
+        rf"A deposit was made in your account\. Here are the details: (?:Date of deposit: {_O_DATE} )?"
+        rf"Time of deposit: {_O_TIME} Amount: {_O_AMOUNT} "
+        r"Account that money was deposited in: \(-\d*(?P<last4>\d{4})\) "
+        r"Reference: (?P<merchant>.+?)(?: Mode of transfer:| For assistance| If you have|$)"
+    )),
+    ("spend", re.compile(
+        rf"A sum of {_O_AMOUNT} was withdrawn from your account \(-\d*(?P<last4>\d{{4}})\) "
+        rf"at {_O_TIME} on {_O_DATE}\.(?P<withdrawal>)"
+    )),
+    ("spend", re.compile(
+        r"we have deposited your contribution in your SRS Account: "
+        r"SRS Contribution Date : (?P<numdate>\d{2}/\d{2}/\d{4}) "
+        rf"Amount : {_O_AMOUNT} From Account : X*(?P<last4>\d{{4}}) .*?Status : Successful(?P<srs>)"
+    )),
+]
+
 # Citi omits the currency on some overseas charges; the amount is then in the
 # currency of the merchant's country, which ends the merchant string.
 _COUNTRY_CURRENCY = {
@@ -113,7 +160,7 @@ _COUNTRY_CURRENCY = {
 _DOMESTIC_SUFFIX = re.compile(r"\s+(SINGAPORE|SG)\s+SGP?$", re.I)
 
 
-def _hsbc(text: str, message_id: str) -> CardAlert | None:
+def _hsbc(text: str, message_id: str, received: datetime | None) -> CardAlert | None:
     if not (m := _HSBC.search(text)):
         return None
     return CardAlert(
@@ -127,7 +174,7 @@ def _hsbc(text: str, message_id: str) -> CardAlert | None:
     )
 
 
-def _dbs(text: str, message_id: str) -> CardAlert | None:
+def _dbs(text: str, message_id: str, received: datetime | None) -> CardAlert | None:
     if not (m := _DBS.search(text)):
         return None
     return CardAlert(
@@ -142,7 +189,7 @@ def _dbs(text: str, message_id: str) -> CardAlert | None:
     )
 
 
-def _citi(text: str, message_id: str) -> CardAlert | None:
+def _citi(text: str, message_id: str, received: datetime | None) -> CardAlert | None:
     if not (m := _CITI.search(text)):
         return None
     merchant = m["merchant"].strip()
@@ -163,7 +210,7 @@ def _citi(text: str, message_id: str) -> CardAlert | None:
     )
 
 
-def _uob(text: str, message_id: str) -> CardAlert | None:
+def _uob(text: str, message_id: str, received: datetime | None) -> CardAlert | None:
     if m := _UOB_SPEND.search(text):
         # UOB charge alerts carry a date but no time.
         when = datetime.strptime(m["date"], "%d/%m/%y")
@@ -185,7 +232,7 @@ def _uob(text: str, message_id: str) -> CardAlert | None:
     )
 
 
-def _ocbc(text: str, message_id: str) -> CardAlert | None:
+def _ocbc(text: str, message_id: str, received: datetime | None) -> CardAlert | None:
     if not (m := _OCBC.search(text)):
         return None
     return CardAlert(
@@ -199,6 +246,55 @@ def _ocbc(text: str, message_id: str) -> CardAlert | None:
     )
 
 
+def _clock(time: str, ampm: str | None) -> tuple[int, int]:
+    hour, minute = (int(x) for x in re.split(r"[:.]", time))
+    if ampm and ampm.upper() == "PM" and hour < 12:
+        hour += 12
+    elif ampm and ampm.upper() == "AM" and hour == 12:
+        hour = 0
+    return hour, minute
+
+
+def _ocbc_account(text: str, message_id: str, received: datetime | None) -> CardAlert | None:
+    found = next(
+        ((kind, m) for kind, pattern in _OCBC_ACCOUNT if (m := pattern.search(text))), None
+    )
+    if found is None:
+        return None
+    kind, m = found
+    groups = m.groupdict()
+    if groups.get("numdate"):
+        when = datetime.strptime(groups["numdate"], "%d/%m/%Y")
+    else:
+        if groups.get("date"):
+            day = datetime.strptime(groups["date"], "%d %b %Y")
+        elif received is not None:
+            day = received
+        else:
+            raise CardAlertError("OCBC deposit alert without a date")
+        hour, minute = _clock(groups["time"], groups["ampm"])
+        when = datetime(day.year, day.month, day.day, hour, minute)
+    if groups.get("srs") is not None:
+        payee = "SRS contribution"
+    elif groups.get("withdrawal") is not None:
+        payee = "Withdrawal"
+    else:
+        payee = groups["merchant"].strip()
+        note = (groups.get("note") or "").strip()
+        if note and note.upper() != "OTHR":
+            payee = f"{payee} ({note})"
+    return CardAlert(
+        bank="OCBC",
+        last4=m["last4"],
+        when=when,
+        currency=m["currency"],
+        amount=Decimal(m["amount"].replace(",", "")),
+        merchant=payee,
+        message_id=message_id,
+        kind=kind,
+    )
+
+
 @dataclass(frozen=True)
 class AlertSource:
     """Where a bank's alerts come from and how to read them."""
@@ -207,7 +303,8 @@ class AlertSource:
     sender: str
     # Subjects of alerts that must parse; anything else from the sender is ignored.
     subject: re.Pattern[str]
-    parse: Callable[[str, str], CardAlert | None]
+    # (text, message_id, arrival time in Singapore) -> alert
+    parse: Callable[[str, str, datetime | None], CardAlert | None]
 
 
 SOURCES = [
@@ -234,22 +331,43 @@ SOURCES = [
         _uob,
     ),
     AlertSource("OCBC", "noreply@notify.ocbc.com", re.compile(r"^Card Transaction Alert$"), _ocbc),
+    AlertSource(
+        "OCBC",
+        "notifications@ocbc.com",
+        re.compile(
+            r"^(PayNow transfer made|NETS QR payment made|You have sent money to .+ via PayNow"
+            r"|We have processed your funds transfer request"
+            r"|OCBC Alert: (Money has been deposited in|Deposit in) your account"
+            r"|OCBC Alert Withdrawal Made|OCBC Alert: Your request to make an SRS contribution)"
+        ),
+        _ocbc_account,
+    ),
 ]
 
 
 def parse_card_alert(
-    source: AlertSource, subject: str, body_html: str, message_id: str
+    source: AlertSource,
+    subject: str,
+    body_html: str,
+    message_id: str,
+    received_at: str | None = None,
 ) -> CardAlert | None:
     """Parse one email from a bank's alert sender.
 
-    Returns None for emails that are not card charge alerts (payments,
-    statements, transfers). Raises CardAlertError when a charge alert does
-    not match the known template, so a template change (or a refund
-    template not seen yet) fails loudly instead of silently dropping spend.
+    `received_at` is the email's UTC arrival time (ISO 8601), for templates
+    that leave out the date. Returns None for emails that are not
+    transaction alerts (statements, marketing). Raises CardAlertError when a
+    transaction alert does not match the known template, so a template
+    change (or a refund template not seen yet) fails loudly instead of
+    silently dropping spend.
     """
     if not source.subject.search(subject.strip()):
         return None
-    alert = source.parse(html_to_text(body_html), message_id)
+    received = None
+    if received_at:
+        utc = datetime.fromisoformat(received_at.replace("Z", "+00:00"))
+        received = (utc + timedelta(hours=8)).replace(tzinfo=None)
+    alert = source.parse(html_to_text(body_html), message_id, received)
     if alert is None:
         raise CardAlertError(f"unrecognised {source.bank} card alert: {subject!r}")
     return alert
@@ -263,7 +381,7 @@ def clean_merchant(merchant: str) -> str:
 def to_transaction(alert: CardAlert, account: str) -> Transaction:
     """An alert as a Lunch Money transaction dated on the transaction date.
 
-    A charge is an expense; a reversal is a credit that offsets it.
+    A charge is an expense; a reversal or deposit is a credit.
     """
     payee = clean_merchant(alert.merchant)
     if alert.kind == "reversal":
@@ -271,7 +389,7 @@ def to_transaction(alert: CardAlert, account: str) -> Transaction:
     return Transaction(
         date=alert.when.date(),
         description=payee,
-        amount=alert.amount if alert.kind == "reversal" else -alert.amount,
+        amount=-alert.amount if alert.kind == "spend" else alert.amount,
         account=account,
         original_currency=alert.currency,
         reference=alert.external_id,
@@ -282,7 +400,7 @@ def to_transaction(alert: CardAlert, account: str) -> Transaction:
 class AlertBatch:
     """A source's alerts, with each reversal paired to the charge it voids."""
 
-    charges: list[CardAlert]  # charges no reversal voids
+    charges: list[CardAlert]  # charges no reversal voids, and deposits
     # (charge, reversal) pairs. Upload neither if the charge is not in Lunch
     # Money yet; upload the reversal as a credit if the charge went up earlier.
     voided: list[tuple[CardAlert, CardAlert]]
@@ -293,11 +411,13 @@ class AlertBatch:
 def pair_reversals(alerts: list[CardAlert]) -> AlertBatch:
     """Pair each reversal with the earliest unvoided charge it matches."""
     alerts = sorted(alerts, key=lambda a: (a.when, a.message_id))
-    charges = [a for a in alerts if a.kind == "spend"]
+    charges = [a for a in alerts if a.kind != "reversal"]
     voided: list[tuple[CardAlert, CardAlert]] = []
     unmatched: list[CardAlert] = []
     for reversal in (a for a in alerts if a.kind == "reversal"):
-        match = next((c for c in charges if c.charge_key == reversal.charge_key), None)
+        match = next(
+            (c for c in charges if c.kind == "spend" and c.charge_key == reversal.charge_key), None
+        )
         if match is None:
             unmatched.append(reversal)
             continue

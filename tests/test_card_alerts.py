@@ -19,7 +19,7 @@ from lunchsync_sg.card_alerts import (
 from lunchsync_sg.fastmail import EmailMessage
 from lunchsync_sg.lunchmoney import UploadResult
 
-HSBC, DBS, CITI, UOB, OCBC = SOURCES
+HSBC, DBS, CITI, UOB, OCBC, OCBC_ACCOUNT = SOURCES
 
 # Same shapes as the banks' real alerts (table cells, <br> separated lines,
 # legal footers); merchants, amounts and card numbers are made up.
@@ -238,6 +238,115 @@ def test_to_transaction_is_an_expense_on_the_transaction_date() -> None:
     assert tx.reference == alert.external_id
 
 
+def ocbc_account(sentence: str) -> str:
+    return (
+        f"<html><body><p>Dear Valued Customer</p><p>{sentence}</p><p>If you have any questions, "
+        "please call our Personal Banking hotline.</p><p>For assistance at any time, please call "
+        "us.</p></body></html>"
+    )
+
+
+class TestOcbcAccount:
+    @pytest.mark.parametrize(
+        ("subject", "sentence", "when", "amount", "payee"),
+        [
+            (
+                "PayNow transfer made",
+                "The following PayNow transfer has been made to EXAMPLE PERSON using his/her "
+                "Mobile (+******1234). Date : 03 Nov 2026 Time : 14:52 PM SGT Amount : SGD 240.00 "
+                "From your account : 360 Account (-123456) Description : Swimming lessons "
+                "Reference number : 0000000000000001",
+                datetime(2026, 11, 3, 14, 52), "-240.00", "EXAMPLE PERSON (Swimming lessons)",
+            ),
+            (
+                "PayNow transfer made",
+                "The following PayNow transfer has been made to EXAMPLE PERSON using his/her "
+                "Mobile (+******1234). Date : 03 Nov 2026 Time : 08:02 AM SGT Amount : SGD 600.00 "
+                "From your account : 360 Account (-123456) Description : OTHR "
+                "Reference number : 0000000000000002",
+                datetime(2026, 11, 3, 8, 2), "-600.00", "EXAMPLE PERSON",
+            ),
+            (
+                "NETS QR payment made",
+                "The following NETS QR payment has been made: Date : 02 Nov 2026 Time : 12:08pm "
+                "SGT Amount : SGD 5.00 From your account : 360 Account (-123456) To : EXAMPLE "
+                "HAWKER NETS merchant ID : 00000000001 NETS Stan ID : 000000",
+                datetime(2026, 11, 2, 12, 8), "-5.00", "EXAMPLE HAWKER",
+            ),
+            (
+                "You have sent money to EXAMPLE FX PTE LTD via PayNow-VPA UEN",
+                "As you requested, we have sent money to EXAMPLE FX PTE LTD using Virtual Payment "
+                "Address UEN number UEN000000000X#FX. Here are the details of your transfer: Date "
+                "of Transfer : 02 Nov 2026 Time of Transfer : 18:39 PM SGT Amount : SGD 1,000.00 "
+                "From your account : 360 Account (-123456) Description/reference no. : P0000 You "
+                "can also log in",
+                datetime(2026, 11, 2, 18, 39), "-1000.00", "EXAMPLE FX PTE LTD",
+            ),
+            (
+                "We have processed your funds transfer request",
+                "We have received your request to make the following transfer: Date of Transfer : "
+                "16 May 2026 Time of Transfer : 12.00 PM SGT Amount : SGD 1400.00 From your "
+                "account : 360 Account (-123456) To account : Example Name (-999999) at EXAMPLE "
+                "BANK LTD Reference number : 0000000000000003",
+                datetime(2026, 5, 16, 12, 0), "-1400.00", "Example Name (-999999) at EXAMPLE BANK LTD",
+            ),
+            (
+                "OCBC Alert: Money has been deposited in your account",
+                "A deposit was made in your account. Here are the details: Date of deposit: 02 Nov "
+                "2026 Time of deposit: 4:20 PM Amount: SGD 25,211.67 Account that money was "
+                "deposited in: (-123456) Reference: EXAMPLE EMPLOYER Mode of transfer: GIRO",
+                datetime(2026, 11, 2, 16, 20), "25211.67", "EXAMPLE EMPLOYER",
+            ),
+            (
+                "OCBC Alert Withdrawal Made",
+                "A sum of SGD 16,000.00 was withdrawn from your account (-123456) at 8:30 PM on "
+                "12 May 2026.",
+                datetime(2026, 5, 12, 20, 30), "-16000.00", "Withdrawal",
+            ),
+            (
+                "OCBC Alert: Your request to make an SRS contribution is successful",
+                "As you instructed, we have deposited your contribution in your SRS Account: SRS "
+                "Contribution Date : 12/05/2026 Amount : SGD 15300 From Account : XXXXXXXX3456 To "
+                "Account : XXXXXXXX0000 Reference Number : 0000 Status : Successful",
+                datetime(2026, 5, 12), "-15300", "SRS contribution",
+            ),
+        ],
+    )
+    def test_templates(
+        self, subject: str, sentence: str, when: datetime, amount: str, payee: str
+    ) -> None:
+        alert = parse_card_alert(OCBC_ACCOUNT, subject, ocbc_account(sentence), "<a>")
+        assert alert is not None
+        assert alert.last4 == "3456"
+        assert alert.when == when
+        tx = to_transaction(alert, "OCBC 360")
+        assert (tx.amount, tx.description) == (Decimal(amount), payee)
+
+    def test_deposit_without_date_uses_arrival_date_in_singapore(self) -> None:
+        sentence = (
+            "A deposit was made in your account. Here are the details: Time of deposit: 5:42 PM "
+            "Amount: SGD 100.00 Account that money was deposited in: (-123456) Reference: from "
+            "EXAMPLE PTE. L"
+        )
+        html = ocbc_account(sentence)
+        # 16:30 UTC on 3 Jul is 00:30 on 4 Jul in Singapore.
+        alert = parse_card_alert(
+            OCBC_ACCOUNT, "OCBC Alert: Deposit in your account", html, "<a>", "2026-07-03T16:30:00Z"
+        )
+        assert alert is not None
+        assert alert.when == datetime(2026, 7, 4, 17, 42)
+        assert alert.kind == "credit"
+
+    def test_marketing_is_ignored(self) -> None:
+        assert parse_card_alert(
+            OCBC_ACCOUNT, "Customise the OCBC app your way", "<p>Hi</p>", "<a>"
+        ) is None
+
+    def test_unknown_transfer_template_fails(self) -> None:
+        with pytest.raises(CardAlertError):
+            parse_card_alert(OCBC_ACCOUNT, "PayNow transfer made", "<p>Sent SGD 1.00</p>", "<a>")
+
+
 class TestPairReversals:
     def alerts(self, *items: tuple[str, str, str]) -> list[Any]:
         out = []
@@ -412,6 +521,25 @@ class TestRunCardAlertSync:
         )
         assert code == 0
         assert self.uploads(lm) == {}
+
+    def test_deposit_is_uploaded_as_credit(self) -> None:
+        config = {
+            **self.CONFIG,
+            "accounts": [*self.CONFIG["accounts"], {"card_number": "000-123456", "name": "Bank"}],
+            "lunch_money": {"api_key": "lm", "account_mapping": {"Bank": 5}},
+            "card_alerts": {"Bank": "2026-10-01"},
+        }
+        deposit = ocbc_account(
+            "A deposit was made in your account. Here are the details: Date of deposit: 02 Nov "
+            "2026 Time of deposit: 4:20 PM Amount: SGD 100.00 Account that money was deposited "
+            "in: (-123456) Reference: EXAMPLE EMPLOYER Mode of transfer: GIRO"
+        )
+        code, lm = self.run(
+            {OCBC_ACCOUNT.sender: [("OCBC Alert: Money has been deposited in your account", deposit, "<o1>")]},
+            config=config,
+        )
+        assert code == 0
+        assert [tx.amount for tx in self.uploads(lm)["Bank"]] == [Decimal("100.00")]
 
     def test_dry_run_uploads_nothing(self) -> None:
         code, lm = self.run({HSBC.sender: [(HSBC_SUBJECT, hsbc(), "<h1>")]}, dry_run=True)

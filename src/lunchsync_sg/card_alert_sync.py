@@ -89,7 +89,9 @@ def run_card_alert_sync(
         alerts: list[CardAlert] = []
         for email in fastmail.fetch_from(source.sender, fetch_from):
             try:
-                alert = parse_card_alert(source, email.subject, email.html, email.message_id)
+                alert = parse_card_alert(
+                    source, email.subject, email.html, email.message_id, email.received_at
+                )
             except CardAlertError as e:
                 failures.append(f"{email.received_at}: {e}")
                 continue
@@ -128,7 +130,7 @@ def run_card_alert_sync(
         ]
         new.sort(key=lambda tx: tx.date)
         _err(
-            f"{account}: {len(charges[account])} charges since {first}, "
+            f"{account}: {len(charges[account])} transactions since {first}, "
             f"{len(voided[account])} reversed, {len(new)} new"
         )
         _print_table(new)
