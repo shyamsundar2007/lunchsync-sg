@@ -189,7 +189,7 @@ class TestParse:
             (UOB, "Your eStatement/eAdvice is ready for viewing"),
             (CITI, "Citi Alerts – Credit Card/Ready Credit Payment Received"),
             (CITI, "Threshold Change Alert"),
-            (DBS, "digibank Alerts - You've received a transfer"),
+            (DBS, "digibank Alert - PayNow profile registered"),
             (DBS, "Your Credit Card eStatement is ready"),
         ],
     )
@@ -244,6 +244,76 @@ def ocbc_account(sentence: str) -> str:
         "please call our Personal Banking hotline.</p><p>For assistance at any time, please call "
         "us.</p></body></html>"
     )
+
+
+def dbs_account(sentence: str) -> str:
+    return (
+        f"<html><body><p>Dear Customer,</p><p>{sentence}</p><p>Thank you for banking with us."
+        "</p></body></html>"
+    )
+
+
+class TestDbsAccount:
+    @pytest.mark.parametrize(
+        ("subject", "sentence", "received", "when", "amount", "payee"),
+        [
+            (
+                "digibank Alerts - You've received a transfer",
+                "You have received SGD 1500.00 via FAST transfer on 14 Nov 2025 09:16 SGT. From: "
+                "EXAMPLE PERSON To: Your DBS/ POSB account ending 7777 Didn’t expect these funds?",
+                None, datetime(2025, 11, 14, 9, 16), "1500.00", "EXAMPLE PERSON",
+            ),
+            (
+                "digibank Alerts - You’ve received a transfer",
+                "You have received SGD 7.20 via PayNow on 02 Feb 2026 13:46 SGT. From: EXAMPLE "
+                "FRIEND To: Your DBS/ POSB account ending 7777 Didn’t expect these funds?",
+                None, datetime(2026, 2, 2, 13, 46), "7.20", "EXAMPLE FRIEND",
+            ),
+            (
+                "digibank Alert - Successful bill payment",
+                "You’ve successfully made a bill payment. Date and Time: 20 Sep 11:36 (SGT) Amount: "
+                "SGD 940.32 From: DBS Savings Account (A/C ending 7777) To: EXAMPLE CARD (Ref "
+                "ending 0000) If unauthorised, please call our DBS hotline.",
+                "2026-09-20T03:36:00Z", datetime(2026, 9, 20, 11, 36), "-940.32",
+                "EXAMPLE CARD (Ref ending 0000)",
+            ),
+            (
+                "digibank Alert - Successful NETS Scan & Pay",
+                "Your NETS Scan & Pay transaction on 31 Dec 23:50 SGT was successful. Date & Time: "
+                "31 Dec 23:50 SGT Amount: S$1.80 From: DBS/POSB Account ending 7777 To: EXAMPLE "
+                "HAWKER If unauthorised, call DBS hotline.",
+                # Arrived just after New Year, Singapore time.
+                "2026-12-31T16:05:00Z", datetime(2026, 12, 31, 23, 50), "-1.80", "EXAMPLE HAWKER",
+            ),
+        ],
+    )
+    def test_templates(
+        self,
+        subject: str,
+        sentence: str,
+        received: str | None,
+        when: datetime,
+        amount: str,
+        payee: str,
+    ) -> None:
+        alert = parse_card_alert(DBS, subject, dbs_account(sentence), "<d>", received)
+        assert alert is not None
+        assert (alert.bank, alert.last4, alert.when) == ("DBS", "7777", when)
+        tx = to_transaction(alert, "DBS")
+        assert (tx.amount, tx.description) == (Decimal(amount), payee)
+
+    def test_year_rolls_back_across_new_year(self) -> None:
+        sentence = (
+            "Your NETS Scan & Pay transaction on 31 Dec 23:50 SGT was successful. Date & Time: "
+            "31 Dec 23:50 SGT Amount: S$1.80 From: DBS/POSB Account ending 7777 To: EXAMPLE "
+            "HAWKER If unauthorised, call DBS hotline."
+        )
+        alert = parse_card_alert(
+            DBS, "digibank Alert - Successful NETS Scan & Pay", dbs_account(sentence), "<d>",
+            "2027-01-02T01:00:00Z",
+        )
+        assert alert is not None
+        assert alert.when == datetime(2026, 12, 31, 23, 50)
 
 
 class TestOcbcAccount:

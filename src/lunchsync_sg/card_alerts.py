@@ -1,7 +1,8 @@
 """Parse transaction alert emails from HSBC, DBS, Citi, UOB and OCBC.
 
 Covers credit card charges, plus the OCBC 360 bank account (PayNow, NETS QR,
-transfers, deposits, withdrawals). Each alert becomes one transaction dated
+transfers, deposits, withdrawals) and DBS savings (received transfers, bill
+payments, NETS). Each alert becomes one transaction dated
 on the transaction date; the statement later carries the posting date.
 Alerts identify the card or account by its last four digits, which map to an
 account through config.json `accounts`. UOB also emails when a charge is
@@ -70,6 +71,27 @@ _DBS = re.compile(
     r"From: DBS/POSB card ending (?P<last4>\d{4}) "
     r"To: (?P<merchant>.+?) If unauthorised"
 )
+
+# DBS savings account alerts. Bill payment and NETS alerts have no year.
+_DBS_ACCOUNT: list[tuple[AlertKind, re.Pattern[str]]] = [
+    ("credit", re.compile(
+        rf"You have received (?P<currency>[A-Z]{{3}}) (?P<amount>{_AMOUNT}) via .+? on "
+        r"(?P<date>\d{1,2} \w{3} \d{4}) (?P<time>\d{2}:\d{2}) SGT\. "
+        r"From: (?P<merchant>.+?) To: Your DBS/ ?POSB account ending (?P<last4>\d{4})"
+    )),
+    ("spend", re.compile(
+        r"You.ve successfully made a bill payment\. "
+        r"Date and Time: (?P<day>\d{1,2} \w{3}) (?P<time>\d{2}:\d{2}) \(SGT\) "
+        rf"Amount: (?P<currency>[A-Z]{{3}}) (?P<amount>{_AMOUNT}) "
+        r"From: .*?\(A/C ending (?P<last4>\d{4})\) To: (?P<merchant>.+?) If unauthorised"
+    )),
+    ("spend", re.compile(
+        r"NETS Scan & Pay transaction on .+? was successful\. "
+        r"Date & Time: (?P<day>\d{1,2} \w{3}) (?P<time>\d{2}:\d{2}) SGT "
+        rf"Amount: S\$(?P<amount>{_AMOUNT}) "
+        r"From: DBS/POSB Account ending (?P<last4>\d{4}) To: (?P<merchant>.+?) If unauthorised"
+    )),
+]
 
 _CITI = re.compile(
     r"there is a charge made on your Citi .+? Card: "
@@ -174,9 +196,19 @@ def _hsbc(text: str, message_id: str, received: datetime | None) -> CardAlert | 
     )
 
 
+def _with_year(day_month: str, time: str, received: datetime | None) -> datetime:
+    """A "dd Mon" date in the year the email arrived (or the one before, across New Year)."""
+    if received is None:
+        raise CardAlertError(f"alert date {day_month!r} has no year and no arrival time")
+    when = datetime.strptime(f"{day_month} {received.year} {time}", "%d %b %Y %H:%M")
+    if when > received + timedelta(days=1):
+        when = when.replace(year=received.year - 1)
+    return when
+
+
 def _dbs(text: str, message_id: str, received: datetime | None) -> CardAlert | None:
     if not (m := _DBS.search(text)):
-        return None
+        return _dbs_account(text, message_id, received)
     return CardAlert(
         bank="DBS",
         last4=m["last4"],
@@ -186,6 +218,30 @@ def _dbs(text: str, message_id: str, received: datetime | None) -> CardAlert | N
         amount=Decimal(m["amount"].replace(",", "")),
         merchant=m["merchant"].strip(),
         message_id=message_id,
+    )
+
+
+def _dbs_account(text: str, message_id: str, received: datetime | None) -> CardAlert | None:
+    found = next(
+        ((kind, m) for kind, pattern in _DBS_ACCOUNT if (m := pattern.search(text))), None
+    )
+    if found is None:
+        return None
+    kind, m = found
+    groups = m.groupdict()
+    if groups.get("date"):
+        when = datetime.strptime(f"{groups['date']} {groups['time']}", "%d %b %Y %H:%M")
+    else:
+        when = _with_year(groups["day"], groups["time"], received)
+    return CardAlert(
+        bank="DBS",
+        last4=m["last4"],
+        when=when,
+        currency=groups.get("currency") or "SGD",
+        amount=Decimal(m["amount"].replace(",", "")),
+        merchant=m["merchant"].strip(),
+        message_id=message_id,
+        kind=kind,
     )
 
 
@@ -314,7 +370,15 @@ SOURCES = [
         re.compile(r"^Transaction Alerts\s+\(Credit Card\)$"),
         _hsbc,
     ),
-    AlertSource("DBS", "ibanking.alert@dbs.com", re.compile(r"^Card Transaction Alert$"), _dbs),
+    AlertSource(
+        "DBS",
+        "ibanking.alert@dbs.com",
+        re.compile(
+            r"^(Card Transaction Alert|digibank Alerts? - (You['’]ve received a transfer"
+            r"|Successful bill payment|Successful NETS Scan & Pay))$"
+        ),
+        _dbs,
+    ),
     AlertSource(
         "Citi",
         "alerts@citibank.com.sg",

@@ -82,9 +82,9 @@ It syncs whichever sources are set up in config.json:
 
 - **Trust** (purchases, refunds, cancelled purchases): map an asset named `Trust Freedom`
   in `account_mapping`.
-- **HSBC, DBS, Citi, UOB and OCBC cards, and the OCBC 360 account** (PayNow, NETS QR,
-  transfers, deposits, withdrawals, SRS contributions): list them under `card_alerts`, each
-  with a start date. Pick a date after the last statement export you uploaded for that card, so alerts
+- **HSBC, DBS, Citi, UOB and OCBC cards, the OCBC 360 account** (PayNow, NETS QR,
+  transfers, deposits, withdrawals, SRS contributions) **and DBS savings** (received
+  transfers, bill payments, NETS): list them under `card_alerts`, each with a start date. Pick a date after the last statement export you uploaded for that card, so alerts
   never overlap it. Set each bank's alert threshold to the minimum so every charge sends
   an email.
 
@@ -103,8 +103,9 @@ upload fails.
 Details:
 
 - Cards and accounts are matched by the last four digits of `card_number`.
-- OCBC sends no alert for GIRO debits, interest or incoming PayNow; those only arrive with
-  the statement export.
+- OCBC and DBS send no alert for GIRO debits, card auto-debits or interest (nor OCBC for
+  incoming PayNow); those only arrive with the statement export. DBS bill payment and NETS
+  alerts have no year, so it comes from the email's arrival date.
 - When a Citi alert leaves out the currency (some overseas charges), the currency is taken
   from the merchant's country code.
 - A cancelled Trust purchase, or a released UOB hold ("transaction reversed"), is dropped
