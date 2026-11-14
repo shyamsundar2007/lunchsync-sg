@@ -81,6 +81,9 @@ class UOBCreditParser(BankParser):
         # Use CSV reader to properly handle quoted multiline fields
         reader = csv.reader(io.StringIO(content))
         in_transactions = False
+        # UOB exports repeat their latest statement section; card lines carry
+        # a unique "Ref No", so an identical row is the same transaction.
+        seen_rows: set[tuple[str, ...]] = set()
 
         for row in reader:
             if not row:
@@ -102,11 +105,16 @@ class UOBCreditParser(BankParser):
             if any("Previous Balance" in cell for cell in row):
                 continue
 
-            # Skip PENDING transactions - only include settled ones
+            # Skip unposted transactions (blank or PENDING posting date)
             posting_date = row[1].strip()
-            if posting_date.upper() == "PENDING":
+            if not posting_date or posting_date.upper() == "PENDING":
                 self.pending_skipped += 1
                 continue
+
+            key = tuple(cell.strip() for cell in row)
+            if key in seen_rows:
+                continue
+            seen_rows.add(key)
 
             # Use Posting Date (row[1]), not Transaction Date (row[0])
             date_val = parse_date(posting_date)

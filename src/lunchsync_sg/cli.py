@@ -32,6 +32,8 @@ Examples:
   lunchsync-sg ~/Downloads/ --upload-lunchmoney --dry-run
   lunchsync-sg --list-parsers
   lunchsync-sg --email-alerts --dry-run
+  lunchsync-sg --reconcile ~/statements/2026-11/
+  lunchsync-sg --reconcile ~/statements/2026-11/ --apply
 
 Supported banks:
   - OCBC (Credit Card, 360 Account)
@@ -144,6 +146,21 @@ Supported banks:
         ),
     )
 
+    # Monthly statement reconcile
+    parser.add_argument(
+        "--reconcile",
+        action="store_true",
+        help=(
+            "Match statement exports (the input files or folders) against Lunch Money: move "
+            "alert rows to the posting date and add missing lines. Preview unless --apply"
+        ),
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="With --reconcile, make the changes",
+    )
+
     args = parser.parse_args()
 
     # Handle setup first (before loading config)
@@ -193,6 +210,17 @@ Supported banks:
             print(f"Error during setup: {e}", file=sys.stderr)
             return 1
         return 0
+
+    if args.reconcile:
+        if not args.inputs:
+            print("Error: --reconcile needs statement files or a folder", file=sys.stderr)
+            return 1
+        from lunchsync_sg.reconcile import run_reconcile
+
+        return run_reconcile(
+            config, [Path(p).expanduser() for p in args.inputs], apply=args.apply,
+            lm_api_key=args.lm_api_key,
+        )
 
     if args.email_alerts:
         alert_since = None

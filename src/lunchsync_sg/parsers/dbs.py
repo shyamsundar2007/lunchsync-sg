@@ -174,7 +174,9 @@ class DBSCreditParser(BankParser):
                 self.pending_skipped += 1
                 continue
 
-            date_val = parse_date(parts[0])
+            # Posting date (column 1), which decides the statement and miles
+            # cycle; card alerts carry the transaction date.
+            date_val = parse_date(parts[1]) or parse_date(parts[0])
             if not date_val:
                 continue
 

@@ -115,6 +115,31 @@ Details:
 - Uploads ask Lunch Money to apply your rules (`apply_rules`), so payee rules set categories
   as transactions arrive.
 
+### Monthly reconcile
+
+Alert emails put each charge in Lunch Money on its transaction date. Once a month, run
+`--reconcile` on the statement exports to bring Lunch Money in line with the bank:
+
+```bash
+lunchsync-sg --reconcile ~/statements/2026-11/          # preview, changes nothing
+lunchsync-sg --reconcile ~/statements/2026-11/ --apply  # make the changes
+```
+
+Each statement line is matched by content (not by an ID, since exports repeat sections and
+banks reword descriptions between exports):
+
+- **Already in Lunch Money** (same line imported before, or same amount within 3 days):
+  skipped.
+- **Matches an alert row** (same amount, alert 0-7 days before the posting date; for a
+  foreign-currency alert, a shared merchant word): the row moves to the posting date, the
+  transaction date goes in its notes, and a foreign charge takes the statement's SGD amount.
+- **Missing** (GIRO debits, interest, taxi final fares, charges without an alert): added, with
+  Lunch Money rules applied.
+
+Unposted lines (no posting date yet, or Pending) are skipped and picked up next time. Alert
+rows inside the statement's dates that no line matched are listed as "not on statement
+yet". Running it again on the same files changes nothing.
+
 ## Configuration
 
 Configuration is stored in `~/.config/lunchsync-sg/config.json`:

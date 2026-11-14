@@ -98,6 +98,32 @@ class LunchMoneyClient:
                 return ids
             offset += len(batch)
 
+    def get_transactions(self, asset_id: int, start_date: str, end_date: str) -> list[dict[str, Any]]:
+        """An asset's transactions between two ISO dates (inclusive), all pages."""
+        rows: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            params = (
+                f"asset_id={asset_id}&start_date={start_date}&end_date={end_date}"
+                f"&offset={offset}&limit=500"
+            )
+            result = self._request("GET", f"transactions?{params}")
+            batch = result.get("transactions", [])
+            rows.extend(batch)
+            if not result.get("has_more") or not batch:
+                return rows
+            offset += len(batch)
+
+    def update_transaction(self, transaction_id: int, fields: dict[str, Any]) -> None:
+        """Update fields of one transaction. Amounts use debit_as_negative."""
+        result = self._request(
+            "PUT",
+            f"transactions/{transaction_id}",
+            json={"transaction": fields, "debit_as_negative": True},
+        )
+        if not result.get("updated"):
+            raise RuntimeError(f"Lunch Money did not update transaction {transaction_id}: {result}")
+
     def upload_transactions(
         self,
         transactions: list[Transaction],
