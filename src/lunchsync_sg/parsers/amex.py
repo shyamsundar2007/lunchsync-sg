@@ -1,6 +1,7 @@
 """American Express parsers."""
 
 import csv
+from collections import Counter
 from datetime import date, datetime
 from io import StringIO
 from pathlib import Path
@@ -74,10 +75,13 @@ class AmexParser(BankParser):
         transactions: list[Transaction] = []
 
         content = content.lstrip("\ufeff")
-        reader = csv.DictReader(StringIO(content))
+        rows = list(csv.DictReader(StringIO(content)))
         account_name = self.get_account_name(self.ACCOUNT_IDENTIFIER)
+        # A fee and its GST share one Reference; Lunch Money needs unique
+        # external_ids, so a shared reference also carries the description.
+        ref_counts = Counter((r.get("Reference") or "").strip().strip("'") for r in rows)
 
-        for row in reader:
+        for row in rows:
             date_val = self._parse_date(row.get("Date") or "")
             if not date_val:
                 continue
@@ -89,6 +93,8 @@ class AmexParser(BankParser):
                 continue
 
             reference = (row.get("Reference") or "").strip().strip("'") or None
+            if reference and ref_counts[reference] > 1:
+                reference = f"{reference}:{desc}"
 
             transactions.append(
                 Transaction(

@@ -202,3 +202,18 @@ def test_uob_skips_unposted_and_repeated_rows() -> None:
 def test_dbs_card_uses_posting_date() -> None:
     txs = DBSCreditParser().parse(TestRunReconcile.CSV)
     assert [t.date for t in txs] == [date(2026, 11, 13)] * 2
+
+
+def test_amex_shared_reference_gets_unique_ids() -> None:
+    from lunchsync_sg.parsers import AmexParser
+
+    export = (
+        "Date,Description,Amount,Extended Details,Appears On Your Statement As,Address,"
+        "City/State,Zip Code,Country,Reference,Category\n"
+        "11/05/2026,CARD ANNUAL FEE,365.00,,CARD ANNUAL FEE,,,,,'100',\n"
+        "11/05/2026,GST,32.85,,GST,,,,,'100',\n"
+        "11/02/2026,BUS/MRT 960949582 SINGAPORE,3.18,,BUS/MRT,,,,,'AT1',\n"
+    )
+    txs = AmexParser().parse(export)
+    ids = [generate_external_id(t) for t in txs]
+    assert ids == ["100:CARD ANNUAL FEE", "100:GST", "AT1"]

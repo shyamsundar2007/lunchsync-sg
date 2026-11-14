@@ -196,6 +196,24 @@ class TestLunchMoneyClient:
         assert body["apply_rules"] is True
 
     @patch("lunchsync_sg.lunchmoney.requests.Session")
+    def test_upload_reports_rejected_batch(self, mock_session_class: MagicMock) -> None:
+        """Lunch Money rejects a batch with a 200 and an error list."""
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"error": ["Duplicate External IDs found"]}
+        mock_session.request.return_value = mock_response
+
+        client = LunchMoneyClient("test_key")
+        tx = Transaction(
+            date=date(2024, 1, 1), description="Fee", amount=Decimal("-1.00"), account="A"
+        )
+        result = client.upload_transactions([tx], {"A": 1})
+
+        assert result.uploaded == 0
+        assert result.errors == ["Batch 1: ['Duplicate External IDs found']"]
+
+    @patch("lunchsync_sg.lunchmoney.requests.Session")
     def test_upload_skips_unmapped_accounts(self, mock_session_class: MagicMock) -> None:
         """Test that transactions with unmapped accounts are skipped."""
         mock_session = MagicMock()

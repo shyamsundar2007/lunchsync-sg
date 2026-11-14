@@ -172,6 +172,10 @@ class LunchMoneyClient:
                     },
                 )
 
+                # Lunch Money rejects a whole batch with a 200 and an "error" list
+                if result.get("error"):
+                    errors.append(f"Batch {i // self.MAX_BATCH_SIZE + 1}: {result['error']}")
+
                 # Parse result - API returns list of IDs for created transactions
                 ids = result.get("ids", [])
                 uploaded += len(ids)
