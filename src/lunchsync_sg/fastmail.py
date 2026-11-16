@@ -7,6 +7,9 @@ from typing import Any
 import requests
 
 SESSION_URL = "https://api.fastmail.com/jmap/session"
+# Used when the session's datacenter-specific apiUrl (e.g. stl.api.fastmail.com) can't be
+# reached: api.fastmail.com proxies JMAP calls to the same backend.
+FALLBACK_API_URL = "https://api.fastmail.com/jmap/api/"
 _USING = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"]
 _PAGE = 100
 
@@ -37,12 +40,21 @@ class FastmailClient:
         response.raise_for_status()
         return response.json()  # type: ignore[no-any-return]
 
-    def _call(self, method_calls: list[list[Any]]) -> list[list[Any]]:
-        response = self._session.post(
+    def _post(self, method_calls: list[list[Any]]) -> requests.Response:
+        return self._session.post(
             self._api_url,
             json={"using": _USING, "methodCalls": method_calls},
             timeout=self._timeout,
         )
+
+    def _call(self, method_calls: list[list[Any]]) -> list[list[Any]]:
+        try:
+            response = self._post(method_calls)
+        except requests.ConnectionError:
+            if self._api_url == FALLBACK_API_URL:
+                raise
+            self._api_url = FALLBACK_API_URL
+            response = self._post(method_calls)
         response.raise_for_status()
         responses: list[list[Any]] = response.json()["methodResponses"]
         for name, args, _ in responses:
