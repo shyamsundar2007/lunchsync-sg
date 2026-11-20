@@ -21,7 +21,12 @@ from lunchsync_sg.card_alerts import (
     to_transaction,
 )
 from lunchsync_sg.config import get_lunchmoney_account_mapping, get_lunchmoney_api_key
-from lunchsync_sg.fastmail import FastmailClient
+from lunchsync_sg.fastmail import (
+    EmailMessage,
+    FastmailClient,
+    clear_alert_label,
+    settled_references,
+)
 from lunchsync_sg.lunchmoney import LunchMoneyClient, generate_external_id
 from lunchsync_sg.models import Transaction
 
@@ -84,6 +89,9 @@ def run_card_alert_sync(
     failures: list[str] = []
     charges: dict[str, list[Transaction]] = {account: [] for account in starts}
     voided: dict[str, list[tuple[Transaction, Transaction]]] = {account: [] for account in starts}
+    email_of: dict[str, EmailMessage] = {}
+    # Reversals of holds that never sent a charge alert: nothing to do, so processed.
+    settled: set[str] = set()
     skipped = unmatched = 0
     for source in SOURCES:
         alerts: list[CardAlert] = []
@@ -97,8 +105,10 @@ def run_card_alert_sync(
                 continue
             if alert:
                 alerts.append(alert)
+                email_of[alert.external_id] = email
         batch = pair_reversals(alerts)
         unmatched += len(batch.unmatched_reversals)
+        settled |= {r.external_id for r in batch.unmatched_reversals}
         for alert, reversal in [(c, None) for c in batch.charges] + list(batch.voided):
             account = by_last4.get(alert.last4)
             if account is None:
@@ -144,7 +154,21 @@ def run_card_alert_sync(
                     f"{account}: expected {len(new)} uploads, Lunch Money created {result.uploaded}"
                 )
             errors.extend(result.errors)
+            uploaded_cleanly = result.uploaded == len(new) and not result.errors
+        else:
+            uploaded_cleanly = True
+        in_lunch_money = set(existing)
+        if uploaded_cleanly:
+            in_lunch_money |= {generate_external_id(tx) for tx in new}
+        settled |= settled_references(
+            [generate_external_id(tx) for tx in charges[account]],
+            [(generate_external_id(c), generate_external_id(r)) for c, r in voided[account]],
+            in_lunch_money,
+        )
 
+    errors += clear_alert_label(
+        fastmail, [email_of[ref] for ref in sorted(settled)], dry_run, log=_err
+    )
     if skipped:
         _err(f"{skipped} alerts for cards not listed under card_alerts were ignored")
     if unmatched:

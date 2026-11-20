@@ -6,7 +6,12 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from lunchsync_sg.config import get_lunchmoney_account_mapping, get_lunchmoney_api_key
-from lunchsync_sg.fastmail import FastmailClient
+from lunchsync_sg.fastmail import (
+    EmailMessage,
+    FastmailClient,
+    clear_alert_label,
+    settled_references,
+)
 from lunchsync_sg.lunchmoney import LunchMoneyClient, generate_external_id
 from lunchsync_sg.models import Transaction
 from lunchsync_sg.trust_email import (
@@ -52,9 +57,11 @@ def run_trust_sync(
     since = since or date.today() - timedelta(days=DEFAULT_LOOKBACK_DAYS)
     # Emails are filtered in UTC; start a day early so SGT-morning alerts are kept.
     fetch_from = datetime.combine(since - timedelta(days=1), datetime.min.time(), UTC)
-    emails = FastmailClient(token).fetch_from(TRUST_SENDER, fetch_from)
+    fastmail = FastmailClient(token)
+    emails = fastmail.fetch_from(TRUST_SENDER, fetch_from)
 
     alerts: list[TrustAlert] = []
+    email_of: dict[str, EmailMessage] = {}
     failures: list[str] = []
     for email in emails:
         try:
@@ -64,6 +71,7 @@ def run_trust_sync(
             continue
         if alert and alert.when.date() >= since:
             alerts.append(alert)
+            email_of[alert.external_id] = email
 
     batch = build_batch(alerts, account)
     lm = LunchMoneyClient(api_key)
@@ -86,6 +94,7 @@ def run_trust_sync(
     _print_table(new)
 
     errors = list(failures)
+    uploaded_cleanly = True
     if new and not dry_run:
         result = lm.upload_transactions(
             new, {account: asset_id}, skip_duplicates=False, apply_rules=True
@@ -94,6 +103,19 @@ def run_trust_sync(
         if result.uploaded != len(new):
             errors.append(f"expected {len(new)} uploads, Lunch Money created {result.uploaded}")
         errors.extend(result.errors)
+        uploaded_cleanly = result.uploaded == len(new) and not result.errors
+    in_lunch_money = set(existing)
+    if uploaded_cleanly:
+        in_lunch_money |= {generate_external_id(tx) for tx in new}
+
+    settled = settled_references(
+        [generate_external_id(tx) for tx in batch.transactions],
+        [(generate_external_id(p), generate_external_id(c)) for p, c in batch.voided],
+        in_lunch_money,
+    )
+    errors += clear_alert_label(
+        fastmail, [email_of[ref] for ref in sorted(settled)], dry_run, log=_err
+    )
 
     for error in errors:
         _err(f"Error: {error}")

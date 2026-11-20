@@ -194,6 +194,7 @@ class TestRunTrustSync:
             patch("lunchsync_sg.trust_sync.LunchMoneyClient") as lunch_money,
         ):
             fastmail.return_value.fetch_from.return_value = emails
+            self.fastmail = fastmail.return_value
             lm = lunch_money.return_value
             lm.get_external_ids.return_value = existing
             lm.upload_transactions.side_effect = lambda txs, *a, **k: UploadResult(
@@ -201,6 +202,11 @@ class TestRunTrustSync:
             )
             code = run_trust_sync(self.CONFIG, since=date(2026, 10, 1), **kwargs)
         return code, lm
+
+    def unlabelled(self) -> set[str]:
+        emails, label = self.fastmail.remove_label.call_args.args
+        assert label == "Bank"
+        return {e.message_id for e in emails}
 
     def uploaded(self, lm: MagicMock) -> list[Any]:
         if not lm.upload_transactions.called:
@@ -215,11 +221,13 @@ class TestRunTrustSync:
         code, lm = self.run([(SPEND, "<1>"), (REFUND, "<2>")], existing={first})
         assert code == 0
         assert [tx.description for tx in self.uploaded(lm)] == ["Bookshop Pte. Ltd."]
+        assert self.unlabelled() == {"<1>", "<2>"}
 
     def test_cancelled_before_upload_sends_nothing(self) -> None:
         code, lm = self.run([(HOLD, "<1>"), (CANCEL, "<2>")], existing=set())
         assert code == 0
         assert self.uploaded(lm) == []
+        assert self.unlabelled() == {"<1>", "<2>"}
 
     def test_cancelled_after_upload_sends_credit(self) -> None:
         hold = alerts((HOLD, "<1>"))[0].external_id
@@ -237,6 +245,8 @@ class TestRunTrustSync:
         code, lm = self.run([(bad, "<1>"), (SPEND, "<2>")], existing=set())
         assert code == 1
         assert len(self.uploaded(lm)) == 1
+        # The upload went through, so <2> is processed; <1> keeps the label.
+        assert self.unlabelled() == {"<2>"}
 
     def test_missing_token(self) -> None:
         with patch.dict("os.environ", {}, clear=True):

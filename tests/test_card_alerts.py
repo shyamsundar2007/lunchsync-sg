@@ -486,6 +486,7 @@ class TestRunCardAlertSync:
         emails: dict[str, list[tuple[str, str, str]]],
         existing: set[str] | None = None,
         config: dict[str, Any] | None = None,
+        upload: Any = None,
         **kwargs: Any,
     ) -> Any:
         def fetch_from(sender: str, since: datetime) -> list[EmailMessage]:
@@ -500,13 +501,20 @@ class TestRunCardAlertSync:
             patch("lunchsync_sg.card_alert_sync.LunchMoneyClient") as lunch_money,
         ):
             fastmail.return_value.fetch_from.side_effect = fetch_from
+            self.fastmail = fastmail.return_value
             lm = lunch_money.return_value
             lm.get_external_ids.return_value = existing or set()
-            lm.upload_transactions.side_effect = lambda txs, *a, **k: UploadResult(
+            lm.upload_transactions.side_effect = upload or (lambda txs, *a, **k: UploadResult(
                 uploaded=len(txs), skipped=0, errors=[]
-            )
+            ))
             code = run_card_alert_sync(config or self.CONFIG, since=date(2026, 9, 1), **kwargs)
         return code, lm
+
+    def unlabelled(self) -> set[str]:
+        """Message-IDs of the emails the sync asked Fastmail to take out of the label."""
+        emails, label = self.fastmail.remove_label.call_args.args
+        assert label == "Bank"
+        return {e.message_id for e in emails}
 
     @staticmethod
     def uploads(lm: MagicMock) -> dict[str, list[Any]]:
@@ -534,6 +542,8 @@ class TestRunCardAlertSync:
             "Citi Card": [date(2026, 10, 10)],
         }
         assert lm.upload_transactions.call_args_list[0].args[1] == {"HSBC Card": 1}
+        # Before its start date or on an unlisted card: not processed, keeps the label.
+        assert self.unlabelled() == {"<h1>", "<c1>"}
 
     def test_skips_alerts_already_in_lunch_money(self) -> None:
         first = parse_card_alert(HSBC, HSBC_SUBJECT, hsbc(), "<h1>")
@@ -547,6 +557,7 @@ class TestRunCardAlertSync:
         )
         assert code == 0
         assert [tx.amount for tx in self.uploads(lm)["HSBC Card"]] == [Decimal("-4.00")]
+        assert self.unlabelled() == {"<h1>", "<h2>"}
 
     def test_reversed_before_upload_sends_nothing(self) -> None:
         code, lm = self.run({UOB.sender: [
@@ -557,6 +568,7 @@ class TestRunCardAlertSync:
         assert self.uploads(lm) == {}
         # The pair was in range and seen, just not uploaded.
         assert lm.get_external_ids.called
+        assert self.unlabelled() == {"<u1>", "<u2>"}
 
     def test_unreversed_charge_is_uploaded(self) -> None:
         code, lm = self.run({UOB.sender: [(UOB_SUBJECT, uob(), "<u1>")]})
@@ -615,6 +627,8 @@ class TestRunCardAlertSync:
         code, lm = self.run({HSBC.sender: [(HSBC_SUBJECT, hsbc(), "<h1>")]}, dry_run=True)
         assert code == 0
         lm.upload_transactions.assert_not_called()
+        assert self.unlabelled() == {"<h1>"}
+        assert self.fastmail.remove_label.call_args.kwargs == {"dry_run": True}
 
     def test_unparseable_alert_fails_but_uploads_the_rest(self) -> None:
         code, lm = self.run({HSBC.sender: [
@@ -623,6 +637,26 @@ class TestRunCardAlertSync:
         ]})
         assert code == 1
         assert len(self.uploads(lm)["HSBC Card"]) == 1
+        assert self.unlabelled() == {"<h1>"}
+
+    def test_failed_upload_keeps_the_label(self) -> None:
+        def upload(txs: Any, mapping: Any, **_: Any) -> UploadResult:
+            ok = "Citi Card" in mapping
+            return UploadResult(uploaded=len(txs) if ok else 0, skipped=0,
+                                errors=[] if ok else ["boom"])
+        code, _ = self.run({
+            HSBC.sender: [(HSBC_SUBJECT, hsbc(), "<h1>")],
+            CITI.sender: [(CITI_SUBJECT, citi(), "<c1>")],
+        }, upload=upload)
+        assert code == 1
+        assert self.unlabelled() == {"<c1>"}
+
+    def test_label_error_fails_the_run(self) -> None:
+        with patch(
+            "lunchsync_sg.card_alert_sync.clear_alert_label", return_value=["no write access"]
+        ):
+            code, _ = self.run({HSBC.sender: [(HSBC_SUBJECT, hsbc(), "<h1>")]})
+        assert code == 1
 
     def test_unknown_card_fails(self) -> None:
         config = {**self.CONFIG, "accounts": self.CONFIG["accounts"][1:]}

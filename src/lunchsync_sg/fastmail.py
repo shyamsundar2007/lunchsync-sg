@@ -1,4 +1,4 @@
-"""Minimal read-only Fastmail JMAP client for fetching alert emails."""
+"""Minimal Fastmail JMAP client: fetch alert emails, then take them out of a label."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,6 +12,8 @@ SESSION_URL = "https://api.fastmail.com/jmap/session"
 FALLBACK_API_URL = "https://api.fastmail.com/jmap/api/"
 _USING = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"]
 _PAGE = 100
+# Fastmail label on bank alert emails, removed once an alert is in Lunch Money.
+ALERT_LABEL = "Bank"
 
 
 @dataclass(frozen=True)
@@ -22,10 +24,12 @@ class EmailMessage:
     subject: str
     received_at: str
     html: str
+    email_id: str = ""  # JMAP id, needed to change the email
+    mailbox_ids: frozenset[str] = frozenset()
 
 
 class FastmailClient:
-    """Fetch emails over JMAP. Needs an API token with read-only Email scope."""
+    """Fetch emails over JMAP. Needs an API token with Email scope; read-write to remove labels."""
 
     def __init__(self, token: str, timeout: float = 30) -> None:
         self._session = requests.Session()
@@ -79,7 +83,9 @@ class FastmailClient:
                 ["Email/get", {
                     "accountId": self._account_id,
                     "#ids": {"resultOf": "q", "name": "Email/query", "path": "/ids"},
-                    "properties": ["messageId", "subject", "receivedAt", "htmlBody", "bodyValues"],
+                    "properties": [
+                        "messageId", "subject", "receivedAt", "mailboxIds", "htmlBody", "bodyValues",
+                    ],
                     "fetchHTMLBodyValues": True,
                 }, "g"],
             ])
@@ -91,6 +97,8 @@ class FastmailClient:
                     message_id=(email.get("messageId") or [email["id"]])[0],
                     subject=email.get("subject") or "",
                     received_at=email["receivedAt"],
+                    email_id=email["id"],
+                    mailbox_ids=frozenset(email.get("mailboxIds") or {}),
                     html="".join(
                         values[part["partId"]]["value"]
                         for part in email["htmlBody"]
@@ -100,3 +108,74 @@ class FastmailClient:
             if len(ids) < _PAGE:
                 return messages
             position += _PAGE
+
+    def _mailboxes(self) -> list[dict[str, Any]]:
+        (response,) = self._call([
+            ["Mailbox/get", {"accountId": self._account_id, "properties": ["name", "role"]}, "m"],
+        ])
+        return response[1]["list"]  # type: ignore[no-any-return]
+
+    def remove_label(
+        self, emails: list[EmailMessage], label: str, dry_run: bool = False
+    ) -> int:
+        """Take `emails` out of the mailbox named `label` (any case); return how many changed.
+
+        An email whose only mailbox is `label` moves to Archive, as Fastmail does when
+        the last label is removed in the web app. Emails not in `label` are left alone.
+        """
+        mailboxes = self._mailboxes()
+        label_id = next(
+            (m["id"] for m in mailboxes if m["name"].casefold() == label.casefold()), None
+        )
+        if label_id is None:
+            raise RuntimeError(f"no Fastmail mailbox named {label!r}")
+        archive_id = next((m["id"] for m in mailboxes if m.get("role") == "archive"), None)
+        update: dict[str, dict[str, Any]] = {}
+        for email in emails:
+            if label_id not in email.mailbox_ids:
+                continue
+            patch: dict[str, Any] = {f"mailboxIds/{label_id}": None}
+            if email.mailbox_ids == {label_id}:
+                if archive_id is None:
+                    raise RuntimeError("no Archive mailbox to move unlabelled emails to")
+                patch[f"mailboxIds/{archive_id}"] = True
+            update[email.email_id] = patch
+        if not update or dry_run:
+            return len(update)
+        (response,) = self._call([
+            ["Email/set", {"accountId": self._account_id, "update": update}, "s"],
+        ])
+        failed = response[1].get("notUpdated") or {}
+        if failed:
+            reasons = sorted({f.get("type", "?") for f in failed.values()})
+            raise RuntimeError(f"Fastmail did not update {len(failed)} emails: {', '.join(reasons)}")
+        return len(update)
+
+
+def clear_alert_label(
+    client: FastmailClient, emails: list[EmailMessage], dry_run: bool, log: Any = print
+) -> list[str]:
+    """Remove ALERT_LABEL from processed `emails`; return errors instead of raising."""
+    try:
+        changed = client.remove_label(emails, ALERT_LABEL, dry_run=dry_run)
+    except (RuntimeError, requests.RequestException) as e:
+        return [f"removing the {ALERT_LABEL} label: {e}"]
+    if changed:
+        verb = "would remove" if dry_run else "removed"
+        log(f"  {verb} the {ALERT_LABEL} label from {changed} emails")
+    return []
+
+
+def settled_references(
+    live: list[str], voided: list[tuple[str, str]], in_lunch_money: set[str]
+) -> set[str]:
+    """External ids of alerts that need nothing more: their emails can lose ALERT_LABEL.
+
+    `live` alerts are settled once in Lunch Money. A (charge, reversal) pair is settled when
+    the charge never went up (both are dropped) or when both are in.
+    """
+    settled = {ref for ref in live if ref in in_lunch_money}
+    for charge, reversal in voided:
+        if charge not in in_lunch_money or reversal in in_lunch_money:
+            settled |= {charge, reversal}
+    return settled
